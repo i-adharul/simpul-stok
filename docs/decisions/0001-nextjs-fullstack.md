@@ -22,7 +22,7 @@ against the REST API. Server Actions are not used.
 - **NestJS:** good structure, but adds a learning curve that does not prove anything extra here.
 - **Vite + React SPA:** still needs a separate backend.
 - **Server Actions instead of REST:** REST is better known, can be tested with `curl` or `.http`
-  files, and is clearer on a CV.
+  files, and is clearer to demo.
 
 ## Consequences
 
