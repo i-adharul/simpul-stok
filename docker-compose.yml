@@ -1,0 +1,24 @@
+# Local development database only. The credentials below are not used anywhere else.
+services:
+  db:
+    image: postgres:18
+    container_name: simpul-stok-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: simpul
+      POSTGRES_PASSWORD: simpul
+      POSTGRES_DB: simpul_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      # Postgres 18+ images keep data under /var/lib/postgresql (not .../data).
+      - pgdata:/var/lib/postgresql
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U simpul -d simpul_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
