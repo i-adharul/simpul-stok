@@ -1,36 +1,78 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Simpul Stok
 
-## Getting Started
+Multi-warehouse, multi-tenant inventory SaaS. A portfolio project built to demonstrate
+concurrency control, atomic transactions, idempotency, and tenant isolation.
 
-First, run the development server:
+Simpul Stok is the stock module of **Simpul**, a planned multi-branch operations platform.
+Other modules (HR, point of sale) are ideas only and are not built or designed yet.
+
+[![CI](https://github.com/i-adharul/simpul-stok/actions/workflows/ci.yml/badge.svg)](https://github.com/i-adharul/simpul-stok/actions/workflows/ci.yml)
+![Status](https://img.shields.io/badge/status-in%20development-yellow)
+
+**Live demo:** _coming soon_ · **Roadmap:** [GitHub Project board](https://github.com/users/i-adharul/projects/1)
+
+> **Note:** payments use the Xendit **sandbox** only. No real money is processed.
+
+## The problem
+
+Businesses with several branches need to know how much of each item is in each
+warehouse, move stock between warehouses, and trace why a number changed.
+This project is designed to prevent:
+
+- wrong balances caused by duplicated requests or half-finished transfers
+- negative stock when two people take the last item at the same time
+- missing history of who changed what, when, and why
+- one company seeing another company's data
+
+This is a product hypothesis for a portfolio, not yet validated with real users.
+
+## What this project demonstrates
+
+| Capability                                | How it is proven                                                   | Status       |
+| ----------------------------------------- | ------------------------------------------------------------------ | ------------ |
+| No negative stock under concurrent access | Concurrency test: 20 simultaneous requests against a stock of 10   | Planned (M1) |
+| Atomic transfers between warehouses       | Test that forces a failure mid-transfer and checks nothing changed | Planned (M1) |
+| Idempotent requests                       | Unique idempotency key enforced in the database                    | Planned (M1) |
+| Tenant isolation                          | Automated tests across every endpoint (404 for other tenants' IDs) | Planned (M1) |
+| Subscription and payment flow             | Webhook verification, duplicate-event handling, access freeze      | Planned (M2) |
+
+## Tech stack
+
+Next.js (App Router) · TypeScript (strict) · PostgreSQL (Neon) · Prisma · Zod ·
+Tailwind CSS + shadcn/ui · Vitest · Playwright · GitHub Actions · Vercel
+
+The reasoning behind each choice is recorded in [`docs/decisions/`](docs/decisions/).
+
+## Getting started
+
+Requirements: Node.js (see `.nvmrc`), pnpm, Docker.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+cp .env.example .env
+docker compose up -d
+pnpm prisma migrate dev
+pnpm prisma db seed
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+> Script names must match `package.json`. Adjust this block once E0-02 and E0-07 are done.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Roadmap
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Milestone | Scope                                                                          | Status                      |
+| --------- | ------------------------------------------------------------------------------ | --------------------------- |
+| M1        | Core inventory online: auth, warehouses, products, stock, transfers, dashboard | In progress (E0 Foundation) |
+| M2        | SaaS: organizations, plans, Xendit sandbox billing, platform admin             | Planned                     |
+| M3        | Extras: import/export, notifications, audit log, Row-Level Security            | Planned                     |
+| M4        | Portfolio polish: demo data, docs, security review                             | Planned                     |
 
-## Learn More
+## Documentation
 
-To learn more about Next.js, take a look at the following resources:
+Product and technical documents are in [`docs/`](docs/).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Known limitations
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Payments are sandbox only.
+- No login rate limiting yet (deferred to later development).
+- No email delivery; invitations and password resets use links that are copied manually.
