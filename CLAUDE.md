@@ -20,7 +20,7 @@ Other Simpul modules (HR, point of sale) are ideas only. Do not build or scaffol
 - Next.js (App Router), one fullstack codebase. API through Route Handlers (REST).
   Server Actions are not used.
 - TypeScript with `strict: true`
-- PostgreSQL (Neon in production, Docker locally), Prisma, Zod
+- PostgreSQL 18 (Neon in production, Docker locally), Prisma, Zod
 - Tailwind CSS + shadcn/ui, React Hook Form, TanStack Query
 - Auth: own session cookie (`httpOnly`, signed with `jose`), passwords hashed with `bcryptjs` (cost 12)
 - Tests: Vitest against a real Postgres, Playwright for a few end-to-end flows
@@ -35,12 +35,19 @@ Next.js here is a recent major version. Follow `AGENTS.md` and read the bundled 
 ```
 src/
   app/                 Next.js routes, layouts and Route Handlers
-  lib/                 Shared utilities (env validation, formatting, logging)
+  lib/                 Shared utilities
+    env-schema.ts      Zod schema and parseEnv() (pure, easy to test)
+    env.ts             Validated `env` object (parses process.env once)
+  instrumentation.ts   Runs at server start; imports lib/env so bad config stops the app
   modules/
     platform/          Auth, organizations, members, plans, billing, platform admin
     stock/             Warehouses, products, stock levels, movements, transfers
+docker/
+  postgres-init/       SQL that runs when the local database volume is first created
 docs/
   decisions/           Architecture decision records (ADRs)
+docker-compose.yml     Local Postgres (databases: simpul_dev and simpul_test)
+.env.example           Every environment variable the app reads, without secrets
 ```
 
 Dependency rule: `modules/stock` may import from `modules/platform`, never the other way
@@ -62,35 +69,41 @@ access. Only the last layer talks to Prisma.
 3. Every query on tenant data goes through the tenant-scoped client. No raw `prisma.<model>` calls
    in services or route handlers.
 4. Validate all input with Zod on the server, not only in forms.
-5. Every stock change runs inside one `prisma.$transaction`. Decrements use a conditional
+5. Read configuration only through `env` from `src/lib/env.ts`, never `process.env` directly.
+   A new variable goes into `env-schema.ts` and `.env.example` in the same change.
+6. Every stock change runs inside one `prisma.$transaction`. Decrements use a conditional
    atomic update (`updateMany` with `quantity >= amount`). Multi-row updates are ordered by
    `(warehouseId, productId)` to avoid deadlocks. The database `CHECK (quantity >= 0)` is the last safety net.
-6. Mutations that can be retried carry an `Idempotency-Key`, enforced by a unique constraint.
-7. Stock movement rows are immutable. Business data is archived, not deleted.
-8. Secrets live only in environment variables. Never commit `.env*` except `.env.example`.
-9. Error responses use `{ code, message, details }` and never include stack traces.
-10. Do not add a library without a stated reason. Prefer what is already in the stack.
-11. Language: code, comments, commit messages, issues and docs in English. UI text in Indonesian.
-12. Dates are stored in UTC and shown in WIB. Numbers use Indonesian formatting in the UI.
+7. Mutations that can be retried carry an `Idempotency-Key`, enforced by a unique constraint.
+8. Stock movement rows are immutable. Business data is archived, not deleted.
+9. Secrets live only in environment variables. Never commit `.env*` except `.env.example`.
+10. Error responses use `{ code, message, details }` and never include stack traces.
+11. Do not add a library without a stated reason. Prefer what is already in the stack.
+12. Language: code, comments, commit messages, issues and docs in English. UI text in Indonesian.
+13. Dates are stored in UTC and shown in WIB. Numbers use Indonesian formatting in the UI.
 
 ## Commands
 
 ```bash
-pnpm dev            # start the dev server
-pnpm build          # production build (includes the TypeScript check)
-pnpm lint           # ESLint
-pnpm format         # Prettier, write
-pnpm format:check   # Prettier, check only
+cp .env.example .env    # first time only
+docker compose up -d    # local Postgres (dev and test databases)
+pnpm dev                # start the dev server
+pnpm build              # production build (includes the TypeScript check)
+pnpm lint               # ESLint
+pnpm format             # Prettier, write
+pnpm format:check       # Prettier, check only
 ```
 
 Added by later stories (update this list when they land):
 
 ```bash
-docker compose up -d              # local Postgres (E0-02)
 pnpm test                         # Vitest (E0-03)
 pnpm prisma migrate dev           # database migrations (E0-04)
 pnpm prisma db seed               # demo data (E0-07)
 ```
+
+To rebuild the local database from scratch (this deletes local data): `docker compose down -v`,
+then `docker compose up -d`.
 
 Before finishing any task: `pnpm lint`, `pnpm build` and the tests must pass.
 
