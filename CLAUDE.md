@@ -128,10 +128,40 @@ The maintainer must be able to explain every file without looking at the screen.
 
 - Before writing code, explain the approach and the alternatives briefly. Wait for agreement.
 - Write the test first when the task has a business rule, then the implementation.
-- Do not write these in full; explain the design and let the maintainer type them:
-  login and sessions, the tenant-scoped data access helper, stock mutation functions and their
-  concurrency tests, webhook verification and idempotency.
-- Forms, tables, styling, seed data and documentation may be written in full.
+- The assistant may write the code directly. Every piece of work ends with a walkthrough (see
+  "Walkthrough rule" below), so the maintainer can trace what runs, in which order, and why.
+- For login and sessions, the tenant-scoped data access helper, stock mutation functions and their
+  concurrency tests, and webhook verification and idempotency: build in small steps. Explain each
+  step and wait for the maintainer to confirm it is understood before starting the next one.
 - Do not trust remembered library versions or APIs. Check the official docs, especially for
   Next.js, Prisma and Xendit.
 - When reviewing code, look for tenant leaks, race conditions and unhandled errors.
+
+## Walkthrough rule
+
+When a story is implemented, write a walkthrough to `notes/walkthroughs/<story-id>.md` (local
+folder, not committed) and summarize it in the reply. Keep functions small enough that one step of
+the walkthrough maps to one function. It must contain:
+
+1. **File map:** each new or changed file with one line on its purpose.
+2. **For every endpoint (Route Handler):**
+   - method and path, and which roles may call it;
+   - inputs: path params, query string, headers, and body (point to the Zod schema);
+   - numbered steps in execution order, each with `file:line`;
+   - every database read or write: the Prisma call, the table, and whether it runs inside a transaction;
+   - where it stops: each `return` and error branch with its status code, and the response body.
+3. **For every other function:** what it receives, what it returns, who calls it, and its side effects.
+4. **How to observe it**, with concrete commands:
+   - the request to send, as an entry in `http/<resource>.http`;
+   - what to look at in the browser Network tab (method, URL, query, headers, body, status, response);
+   - where to put a temporary `console.log` or a VS Code logpoint, and what output to expect
+     (server code logs to the terminal running `pnpm dev`, not to the browser console);
+   - the SQL to run in `psql` to see the database before and after.
+5. **Why, not only what:** name the concept behind each non-obvious step.
+
+Add short comments explaining _why_ at layer boundaries (route handler, service, data access).
+Do not add comments that only repeat the code.
+
+For a story without endpoints (for example a database schema), the walkthrough covers each model,
+column and constraint with the reason it exists (cite the doc), each statement in `migration.sql`,
+each configuration file, and the `psql` commands that show the result.
