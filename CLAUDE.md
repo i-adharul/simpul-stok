@@ -93,7 +93,7 @@ docker compose up -d    # local Postgres (dev and test databases)
 pnpm dev                # start the dev server
 pnpm build              # production build (includes the TypeScript check)
 pnpm lint               # ESLint
-pnpm typecheck          # TypeScript check without building
+pnpm typecheck          # generate Next.js route types, then check TypeScript
 pnpm test               # run all tests once (Vitest)
 pnpm test:watch         # re-run tests on change while developing
 pnpm format             # Prettier, write
