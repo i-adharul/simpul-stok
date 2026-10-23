@@ -38,6 +38,7 @@ src/
   lib/                 Shared utilities
     env-schema.ts      Zod schema and parseEnv() (pure, easy to test)
     env.ts             Validated `env` object (parses process.env once)
+    env-schema.test.ts Unit tests live next to the code they test (`*.test.ts`)
   instrumentation.ts   Runs at server start; imports lib/env so bad config stops the app
   modules/
     platform/          Auth, organizations, members, plans, billing, platform admin
@@ -48,6 +49,8 @@ docs/
   decisions/           Architecture decision records (ADRs)
 docker-compose.yml     Local Postgres (databases: simpul_dev and simpul_test)
 .env.example           Every environment variable the app reads, without secrets
+vitest.config.mts      Test runner configuration
+.github/workflows/     CI: format check, lint, typecheck, tests and build on every pull request
 ```
 
 Dependency rule: `modules/stock` may import from `modules/platform`, never the other way
@@ -90,6 +93,9 @@ docker compose up -d    # local Postgres (dev and test databases)
 pnpm dev                # start the dev server
 pnpm build              # production build (includes the TypeScript check)
 pnpm lint               # ESLint
+pnpm typecheck          # TypeScript check without building
+pnpm test               # run all tests once (Vitest)
+pnpm test:watch         # re-run tests on change while developing
 pnpm format             # Prettier, write
 pnpm format:check       # Prettier, check only
 ```
@@ -97,7 +103,6 @@ pnpm format:check       # Prettier, check only
 Added by later stories (update this list when they land):
 
 ```bash
-pnpm test                         # Vitest (E0-03)
 pnpm prisma migrate dev           # database migrations (E0-04)
 pnpm prisma db seed               # demo data (E0-07)
 ```
@@ -105,7 +110,8 @@ pnpm prisma db seed               # demo data (E0-07)
 To rebuild the local database from scratch (this deletes local data): `docker compose down -v`,
 then `docker compose up -d`.
 
-Before finishing any task: `pnpm lint`, `pnpm build` and the tests must pass.
+Before finishing any task: `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test` and
+`pnpm build` must pass. CI runs the same checks on every pull request.
 
 ## Workflow
 
@@ -114,6 +120,7 @@ Before finishing any task: `pnpm lint`, `pnpm build` and the tests must pass.
   PR body includes `Closes #<issue number>`.
 - Keep stories small (about 2 hours). Commit in small steps with clear messages.
 - Tests first for business rules, then the implementation.
+- Tests that need a database use the `TEST_DATABASE_URL` database, never the development one.
 
 ## How to assist
 
