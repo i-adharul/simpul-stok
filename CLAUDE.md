@@ -103,13 +103,13 @@ pnpm test               # run all tests once (Vitest); needs the test database (
 pnpm test:watch         # re-run tests on change while developing
 pnpm format             # Prettier, write
 pnpm format:check       # Prettier, check only
+pnpm prisma db seed     # demo data; refuses a non-local database (see SEED_ALLOW_REMOTE in .env.example)
 ```
 
 Added by later stories (update this list when they land):
 
 ```bash
 pnpm prisma migrate dev           # database migrations (E0-04)
-pnpm prisma db seed               # demo data (E0-07)
 ```
 
 To rebuild the local database from scratch (this deletes local data): `docker compose down -v`,
