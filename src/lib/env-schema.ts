@@ -9,6 +9,8 @@ const envSchema = z.object({
   DATABASE_URL: postgresUrl,
   // Only needed when running automated tests.
   TEST_DATABASE_URL: postgresUrl.optional(),
+  // Only read by the seed (assertSeedTarget): lets it write demo accounts to a non-local database.
+  SEED_ALLOW_REMOTE: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

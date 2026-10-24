@@ -1,14 +1,12 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { env } from "../src/lib/env";
-import { seedBase } from "../src/modules/platform/seed";
+import { assertSeedTarget, seedBase } from "../src/modules/platform/seed";
 
 // Entry point of `pnpm prisma db seed` (prisma.config.ts, migrations.seed).
-// The demo passwords are public in the repository, so this must never reach a real database.
+// The target is checked before a client exists, so a wrong DATABASE_URL never gets a connection.
 async function main() {
-  if (env.NODE_ENV === "production") {
-    throw new Error("Refusing to seed demo accounts with NODE_ENV=production.");
-  }
+  assertSeedTarget(env.DATABASE_URL, env.NODE_ENV, env.SEED_ALLOW_REMOTE);
   const prisma = new PrismaClient({
     adapter: new PrismaPg({ connectionString: env.DATABASE_URL }),
   });
@@ -21,6 +19,7 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error);
+  // Print the message only: it never holds the URL, and a stack adds nothing for a refusal.
+  console.error(error instanceof Error ? error.message : error);
   process.exit(1);
 });
