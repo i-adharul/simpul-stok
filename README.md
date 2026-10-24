@@ -50,7 +50,7 @@ Requirements: Node.js (see `.nvmrc`), pnpm, Docker.
 ```bash
 pnpm install
 cp .env.example .env
-docker compose up -d
+docker compose up -d    # Postgres on host port 5433 (5432 is often taken by a local install)
 pnpm prisma migrate dev
 pnpm prisma db seed
 pnpm dev
@@ -76,3 +76,7 @@ Product and technical documents are in [`docs/`](docs/).
 - Payments are sandbox only.
 - No login rate limiting yet (deferred to later development).
 - No email delivery; invitations and password resets use links that are copied manually.
+
+## How this project is built
+
+This project is built with AI pair programming (Claude Code). The maintainer reviews every change and must be able to explain every part of it; the working rules are in [`CLAUDE.md`](CLAUDE.md) and the decisions and documents are in [`docs/`](docs/).

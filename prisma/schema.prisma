@@ -1,0 +1,105 @@
+// Stories E0-04: Organization, User, Plan, Subscription (docs/03_Data_Model.md: E01, E02, E12, E13).
+// Rules Prisma cannot express (one Owner per organization, lowercase email, CHECK constraints)
+// live in the SQL of the init migration. See prisma/migrations/*_init/migration.sql.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum OrganizationStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+
+  @@map("organization_status")
+}
+
+enum UserRole {
+  PLATFORM_ADMIN
+  OWNER
+  WAREHOUSE_ADMIN
+  VIEWER
+
+  @@map("user_role")
+}
+
+// E01: one row per customer company.
+model Organization {
+  id        String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name      String
+  slug      String             @unique
+  address   String?
+  status    OrganizationStatus @default(TRIAL)
+  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  users        User[]
+  subscription Subscription?
+
+  @@map("organizations")
+}
+
+// E02: organizationId is empty only for a PLATFORM_ADMIN.
+model User {
+  id                String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId    String?   @map("organization_id") @db.Uuid
+  email             String    @unique
+  name              String
+  passwordHash      String    @map("password_hash")
+  role              UserRole
+  isActive          Boolean   @default(true) @map("is_active")
+  lastLoginAt       DateTime? @map("last_login_at") @db.Timestamptz(3)
+  passwordChangedAt DateTime? @map("password_changed_at") @db.Timestamptz(3)
+  resetTokenHash    String?   @map("reset_token_hash")
+  resetExpiresAt    DateTime? @map("reset_expires_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  // Restrict is explicit: the default for an optional relation is SetNull, which would turn a
+  // tenant user into a platform admin. Business data is archived, never deleted.
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId])
+  @@map("users")
+}
+
+// E12: global (no organizationId), filled by the seed.
+model Plan {
+  id            String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name          String   @unique
+  priceIdr      Int      @map("price_idr")
+  maxWarehouses Int      @map("max_warehouses")
+  maxProducts   Int      @map("max_products")
+  maxMembers    Int      @map("max_members")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+// E13: one per organization. The status lives in Organization.status, not here.
+model Subscription {
+  id                 String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId     String   @unique @map("organization_id") @db.Uuid
+  planId             String   @map("plan_id") @db.Uuid
+  billingDay         Int?     @map("billing_day")
+  currentPeriodStart DateTime @map("current_period_start") @db.Timestamptz(3)
+  currentPeriodEnd   DateTime @map("current_period_end") @db.Timestamptz(3)
+  graceUntil         DateTime @map("grace_until") @db.Timestamptz(3)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  plan         Plan         @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([planId])
+  @@map("subscriptions")
+}
