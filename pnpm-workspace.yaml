@@ -7,3 +7,5 @@ allowBuilds:
   sharp: false
   # Build script blocked; `pnpm install --frozen-lockfile` and `pnpm build` still succeed without it.
   unrs-resolver: false
+  # Postinstall only prepares the esbuild binary (npm fallback if the platform package is missing); blocked, and `tsx prisma/seed.ts`, `pnpm typecheck` and `pnpm test` pass without it.
+  esbuild: false

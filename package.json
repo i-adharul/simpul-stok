@@ -17,6 +17,7 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
+    "bcryptjs": "^3.0.3",
     "next": "16.4.2",
     "pg": "^8.23.1",
     "react": "19.3.0",
@@ -35,6 +36,7 @@
     "prettier": "^3.9.10",
     "prisma": "^7.10.1",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^5.0.5"
   },
