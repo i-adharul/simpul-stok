@@ -74,6 +74,11 @@ access. Only the last layer talks to Prisma.
 4. Validate all input with Zod on the server, not only in forms.
 5. Read configuration only through `env` from `src/lib/env.ts`, never `process.env` directly.
    A new variable goes into `env-schema.ts` and `.env.example` in the same change.
+   Exceptions (and only these): `prisma.config.ts` reads `process.env` and loads `.env`, because the
+   Prisma CLI runs outside the app and must not need every app variable; `src/instrumentation.ts`
+   reads `NEXT_RUNTIME`, a marker set by the framework, not app configuration; the Vitest
+   `src/test/global-setup.ts` only writes `process.env.DATABASE_URL`, so the Prisma CLI migrates the
+   test database.
 6. Every stock change runs inside one `prisma.$transaction`. Decrements use a conditional
    atomic update (`updateMany` with `quantity >= amount`). Multi-row updates are ordered by
    `(warehouseId, productId)` to avoid deadlocks. The database `CHECK (quantity >= 0)` is the last safety net.
@@ -89,12 +94,12 @@ access. Only the last layer talks to Prisma.
 
 ```bash
 cp .env.example .env    # first time only
-docker compose up -d    # local Postgres (dev and test databases)
+docker compose up -d    # local Postgres on host port 5433 (dev and test databases)
 pnpm dev                # start the dev server
 pnpm build              # production build (includes the TypeScript check)
 pnpm lint               # ESLint
 pnpm typecheck          # generate Next.js route types, then check TypeScript
-pnpm test               # run all tests once (Vitest)
+pnpm test               # run all tests once (Vitest); needs the test database (docker compose up -d)
 pnpm test:watch         # re-run tests on change while developing
 pnpm format             # Prettier, write
 pnpm format:check       # Prettier, check only
@@ -121,6 +126,8 @@ Before finishing any task: `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `
 - Keep stories small (about 2 hours). Commit in small steps with clear messages.
 - Tests first for business rules, then the implementation.
 - Tests that need a database use the `TEST_DATABASE_URL` database, never the development one.
+- Do not add AI attribution trailers to commit messages or PR descriptions; AI-assisted development is disclosed in the README.
+- The project uses Prisma ORM 7; upgrading to Prisma ORM 8 needs its own story and ADR.
 
 ## How to assist
 
@@ -141,7 +148,13 @@ The maintainer must be able to explain every file without looking at the screen.
 
 When a story is implemented, write a walkthrough to `notes/walkthroughs/<story-id>.md` (local
 folder, not committed) and summarize it in the reply. Keep functions small enough that one step of
-the walkthrough maps to one function. It must contain:
+the walkthrough maps to one function.
+
+Language: walkthroughs are written in Indonesian. Code, file names, column names and technical
+terms stay in English. This only applies to walkthroughs: code, comments, commit messages, issues
+and repository docs stay in English (rule 12).
+
+It must contain:
 
 1. **File map:** each new or changed file with one line on its purpose.
 2. **For every endpoint (Route Handler):**
@@ -158,10 +171,20 @@ the walkthrough maps to one function. It must contain:
      (server code logs to the terminal running `pnpm dev`, not to the browser console);
    - the SQL to run in `psql` to see the database before and after.
 5. **Why, not only what:** name the concept behind each non-obvious step.
+6. **Sumber dokumentasi resmi (official documentation sources):** a table with the code pattern or
+   file, the official link, the section followed (heading or example name), and any deviation from
+   the official example with the reason. Rules for the sources:
+   - Only official sites (for example prisma.io/docs, postgresql.org/docs, nodejs.org, pnpm.io,
+     vitest.dev, docs.docker.com, hub.docker.com, and the official docs of whatever the story uses).
+   - Open every link with a fetch tool and confirm the page exists and contains the section named.
+     Never guess a URL. If a page is missing (404) or the section is not found, write
+     "tidak terverifikasi" in that row instead of inventing anything.
+   - Record the date of the check and the documentation version that was read.
 
 Add short comments explaining _why_ at layer boundaries (route handler, service, data access).
 Do not add comments that only repeat the code.
 
 For a story without endpoints (for example a database schema), the walkthrough covers each model,
 column and constraint with the reason it exists (cite the doc), each statement in `migration.sql`,
-each configuration file, and the `psql` commands that show the result.
+each configuration file, and the `psql` commands that show the result. It still ends with the
+"Sumber dokumentasi resmi" section (item 6).
