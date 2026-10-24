@@ -1,9 +1,11 @@
 // Story E0-04: Organization, User, Plan, Subscription (docs/03_Data_Model.md: E01, E02, E12, E13).
 // Story E0-05: Warehouse, UserWarehouse, Product, StockLevel, StockTransfer, StockMovement,
 // IdempotencyKey (E04 to E10).
+// Story E0-06: Invitation, ImportJob, Invoice, WebhookEvent, AuditLog, Notification (E03, E11,
+// E14 to E17). All 17 entities now exist.
 // Rules Prisma cannot express (one Owner per organization, lowercase email, CHECK constraints,
-// the immutability trigger on stock_movements) live in the custom SQL at the end of the migrations.
-// See prisma/migrations/*_init/migration.sql and prisma/migrations/*_stock_schema/migration.sql.
+// the immutability triggers on stock_movements and audit_logs) live in the custom SQL at the end
+// of the migrations. See prisma/migrations/*_init, *_stock_schema and *_billing_schema.
 
 generator client {
   provider = "prisma-client"
@@ -51,6 +53,11 @@ model Organization {
   stockTransfers  StockTransfer[]
   stockMovements  StockMovement[]
   idempotencyKeys IdempotencyKey[]
+  invitations     Invitation[]
+  importJobs      ImportJob[]
+  invoices        Invoice[]
+  auditLogs       AuditLog[]
+  notifications   Notification[]
 
   @@map("organizations")
 }
@@ -78,6 +85,10 @@ model User {
   userWarehouses UserWarehouse[]
   stockTransfers StockTransfer[]
   stockMovements StockMovement[]
+  invitations    Invitation[]
+  importJobs     ImportJob[]
+  auditLogs      AuditLog[]
+  notifications  Notification[]
 
   @@index([organizationId])
   @@map("users")
@@ -95,6 +106,7 @@ model Plan {
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   subscriptions Subscription[]
+  invoices      Invoice[]
 
   @@map("plans")
 }
@@ -113,6 +125,7 @@ model Subscription {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   plan         Plan         @relation(fields: [planId], references: [id], onDelete: Restrict)
+  invoices     Invoice[]
 
   @@index([planId])
   @@map("subscriptions")
@@ -252,8 +265,7 @@ model StockTransfer {
 }
 
 // E09: append-only. A trigger in the migration rejects UPDATE and DELETE (ADR 0005).
-// importJobId is a plain nullable column without a relation: ImportJob (E11) arrives in E0-06,
-// which adds the foreign key.
+// importJobId may be filled only for type IMPORT (CHECK in the E0-05 migration).
 model StockMovement {
   id             String               @id @default(dbgenerated("uuidv7()")) @db.Uuid
   organizationId String               @map("organization_id") @db.Uuid
@@ -272,6 +284,7 @@ model StockMovement {
   warehouse    Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   product      Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
   transfer     StockTransfer? @relation(fields: [transferId], references: [id], onDelete: Restrict)
+  importJob    ImportJob?     @relation(fields: [importJobId], references: [id], onDelete: Restrict)
   createdBy    User           @relation(fields: [createdById], references: [id], onDelete: Restrict)
 
   // Every composite index starts with organizationId (BL16). The first one serves the history
@@ -280,6 +293,7 @@ model StockMovement {
   @@index([organizationId, productId, createdAt(sort: Desc)])
   @@index([organizationId, warehouseId, createdAt(sort: Desc)])
   @@index([transferId])
+  @@index([importJobId])
   @@index([createdById])
   @@map("stock_movements")
 }
@@ -298,4 +312,173 @@ model IdempotencyKey {
   @@id([organizationId, key, endpoint])
   @@index([createdAt])
   @@map("idempotency_keys")
+}
+
+enum ImportJobStatus {
+  PREVIEW
+  COMMITTED
+  FAILED
+
+  @@map("import_job_status")
+}
+
+enum InvoiceKind {
+  INITIAL
+  PLAN_CHANGE
+  RENEWAL
+
+  @@map("invoice_kind")
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  EXPIRED
+  FAILED
+
+  @@map("invoice_status")
+}
+
+enum NotificationType {
+  LOW_STOCK
+  INVOICE_DUE
+  TRIAL_ENDING
+  SUSPENDED
+
+  @@map("notification_type")
+}
+
+// E03: the token is stored only as a hash. Pending, Expired and Accepted are derived from
+// expiresAt and acceptedAt; a cancelled invitation is deleted (the only deletable table here, by
+// design in the data model). warehouseIds is a list of IDs, not a foreign key (ERD_Relations.md).
+// The role (WAREHOUSE_ADMIN or VIEWER) and lowercase email are CHECKs in the migration.
+model Invitation {
+  id             String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  email          String
+  role           UserRole
+  warehouseIds   String[]  @map("warehouse_ids") @db.Uuid
+  tokenHash      String    @unique @map("token_hash")
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(3)
+  acceptedAt     DateTime? @map("accepted_at") @db.Timestamptz(3)
+  createdById    String    @map("created_by_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdBy    User         @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  // "One pending invitation per email" is an application rule (BL05), so this index is only for lookups.
+  @@index([organizationId, email])
+  @@index([createdById])
+  @@map("invitations")
+}
+
+// E11: the validation result of an import. rows holds the valid rows for the commit (BL18).
+model ImportJob {
+  id             String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String          @map("organization_id") @db.Uuid
+  fileName       String          @map("file_name")
+  status         ImportJobStatus @default(PREVIEW)
+  totalRows      Int             @map("total_rows")
+  errorRows      Int             @map("error_rows")
+  errorReport    Json            @default("[]") @map("error_report")
+  rows           Json
+  createdById    String          @map("created_by_id") @db.Uuid
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdBy      User            @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  stockMovements StockMovement[]
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([createdById])
+  @@map("import_jobs")
+}
+
+// E14: the Xendit invoice. externalId is the join to webhook events (no foreign key, WebhookEvent
+// is global). planId is the plan that takes effect once paid.
+model Invoice {
+  id             String        @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String        @map("organization_id") @db.Uuid
+  subscriptionId String        @map("subscription_id") @db.Uuid
+  planId         String        @map("plan_id") @db.Uuid
+  number         String
+  amountIdr      Int           @map("amount_idr")
+  kind           InvoiceKind
+  periodStart    DateTime      @map("period_start") @db.Timestamptz(3)
+  periodEnd      DateTime      @map("period_end") @db.Timestamptz(3)
+  status         InvoiceStatus @default(PENDING)
+  externalId     String        @unique @map("external_id")
+  paymentUrl     String?       @map("payment_url")
+  dueAt          DateTime      @map("due_at") @db.Timestamptz(3)
+  expiresAt      DateTime      @map("expires_at") @db.Timestamptz(3)
+  paidAt         DateTime?     @map("paid_at") @db.Timestamptz(3)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  plan         Plan         @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status])
+  @@index([subscriptionId])
+  @@index([planId])
+  @@map("invoices")
+}
+
+// E15: global, no organizationId (docs/03_Data_Model.md). The unique (provider, eventId) is what
+// makes a duplicate webhook harmless (BL22). receivedAt is its created time, so there is no createdAt.
+model WebhookEvent {
+  id          String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  provider    String
+  eventId     String    @map("event_id")
+  payload     Json
+  receivedAt  DateTime  @default(now()) @map("received_at") @db.Timestamptz(3)
+  processedAt DateTime? @map("processed_at") @db.Timestamptz(3)
+
+  @@unique([provider, eventId])
+  @@map("webhook_events")
+}
+
+// E16: append-only. A trigger in the migration rejects UPDATE and DELETE (same idea as ADR 0005).
+// entityType and entityId are a loose reference, not a foreign key (ERD_Relations.md).
+model AuditLog {
+  id             String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  actorId        String   @map("actor_id") @db.Uuid
+  action         String
+  entityType     String   @map("entity_type")
+  entityId       String   @map("entity_id")
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  actor        User         @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([actorId])
+  @@index([organizationId, entityType, entityId])
+  @@map("audit_logs")
+}
+
+// E17: in-app notifications, readable only by the target user (BL30).
+model Notification {
+  id             String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  userId         String           @map("user_id") @db.Uuid
+  type           NotificationType
+  message        String
+  readAt         DateTime?        @map("read_at") @db.Timestamptz(3)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  // Serves the bell dropdown: the newest 20 of one user (S-notification panel).
+  @@index([organizationId, userId, createdAt(sort: Desc)])
+  @@index([userId])
+  @@map("notifications")
 }
