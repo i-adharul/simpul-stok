@@ -57,6 +57,52 @@ export const DEMO_ACCOUNTS: readonly {
   },
 ];
 
+export const SEED_ALLOW_REMOTE_VALUE = "i-understand-this-writes-demo-accounts";
+
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+// The seed writes demo accounts, including a platform admin, with passwords that are public in this
+// repository. This runs before any client or connection exists and is pure, so a wrong target costs
+// nothing. Messages carry the host name only: the URL also holds the user, password and database.
+export function assertSeedTarget(
+  databaseUrl: string | undefined,
+  nodeEnv: string,
+  allowRemote: string | undefined,
+): void {
+  if (nodeEnv === "production") {
+    throw new Error("Refusing to seed: NODE_ENV=production. The seed writes demo accounts.");
+  }
+  const url = parseDatabaseUrl(databaseUrl);
+  if (!url) {
+    throw new Error("Refusing to seed: DATABASE_URL is empty or not a valid connection string.");
+  }
+  // pg lets ?host= or ?hostaddr= replace the host of the URL, which would bypass the check below.
+  const overridesHost = [...url.searchParams.keys()].some((key) =>
+    ["host", "hostaddr"].includes(key.toLowerCase()),
+  );
+  if (overridesHost) {
+    throw new Error(
+      `Refusing to seed: the connection string for host "${url.hostname}" sets another host in its query.`,
+    );
+  }
+  if (LOCAL_HOSTS.has(url.hostname) || allowRemote === SEED_ALLOW_REMOTE_VALUE) return;
+  throw new Error(
+    `Refusing to seed host "${url.hostname}": it is not local, and the seed writes demo accounts ` +
+      `(including a platform admin) with passwords that are public in the repository. ` +
+      `If you really mean it, set SEED_ALLOW_REMOTE=${SEED_ALLOW_REMOTE_VALUE}.`,
+  );
+}
+
+function parseDatabaseUrl(value: string | undefined): URL | null {
+  if (!value?.trim()) return null;
+  try {
+    const url = new URL(value);
+    return url.hostname ? url : null;
+  } catch {
+    return null; // never echo the value: it may hold a password
+  }
+}
+
 // Runs in one transaction and can be repeated: every step is an upsert or a create-if-missing.
 export async function seedBase(prisma: PrismaClient): Promise<void> {
   // Hash outside the transaction: cost 12 is slow and would keep a connection busy.
