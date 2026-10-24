@@ -1,3 +1,9 @@
 allowBuilds:
+  # Downloads the schema-engine binary that `prisma migrate` needs, so it must run.
+  "@prisma/engines": true
+  # Its only script is a Node-version check; the CLI works without it, so it stays blocked (explicit false keeps `pnpm install --frozen-lockfile` from failing).
+  prisma: false
+  # Build script blocked; `pnpm install --frozen-lockfile` and `pnpm build` still succeed without it.
   sharp: false
+  # Build script blocked; `pnpm install --frozen-lockfile` and `pnpm build` still succeed without it.
   unrs-resolver: false
