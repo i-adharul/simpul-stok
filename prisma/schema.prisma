@@ -1,6 +1,9 @@
-// Stories E0-04: Organization, User, Plan, Subscription (docs/03_Data_Model.md: E01, E02, E12, E13).
-// Rules Prisma cannot express (one Owner per organization, lowercase email, CHECK constraints)
-// live in the SQL of the init migration. See prisma/migrations/*_init/migration.sql.
+// Story E0-04: Organization, User, Plan, Subscription (docs/03_Data_Model.md: E01, E02, E12, E13).
+// Story E0-05: Warehouse, UserWarehouse, Product, StockLevel, StockTransfer, StockMovement,
+// IdempotencyKey (E04 to E10).
+// Rules Prisma cannot express (one Owner per organization, lowercase email, CHECK constraints,
+// the immutability trigger on stock_movements) live in the custom SQL at the end of the migrations.
+// See prisma/migrations/*_init/migration.sql and prisma/migrations/*_stock_schema/migration.sql.
 
 generator client {
   provider = "prisma-client"
@@ -39,8 +42,15 @@ model Organization {
   createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  users        User[]
-  subscription Subscription?
+  users           User[]
+  subscription    Subscription?
+  warehouses      Warehouse[]
+  userWarehouses  UserWarehouse[]
+  products        Product[]
+  stockLevels     StockLevel[]
+  stockTransfers  StockTransfer[]
+  stockMovements  StockMovement[]
+  idempotencyKeys IdempotencyKey[]
 
   @@map("organizations")
 }
@@ -64,6 +74,10 @@ model User {
   // Restrict is explicit: the default for an optional relation is SetNull, which would turn a
   // tenant user into a platform admin. Business data is archived, never deleted.
   organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  userWarehouses UserWarehouse[]
+  stockTransfers StockTransfer[]
+  stockMovements StockMovement[]
 
   @@index([organizationId])
   @@map("users")
@@ -102,4 +116,186 @@ model Subscription {
 
   @@index([planId])
   @@map("subscriptions")
+}
+
+enum ProductUnit {
+  bks
+  ktk
+  pcs
+  btl
+  jrg
+  pak
+
+  @@map("product_unit")
+}
+
+enum StockMovementType {
+  RECEIVE
+  ADJUST
+  TRANSFER_OUT
+  TRANSFER_IN
+  IMPORT
+
+  @@map("stock_movement_type")
+}
+
+enum StockMovementReason {
+  STOCK_OPNAME
+  DAMAGED
+  LOST
+  CORRECTION
+
+  @@map("stock_movement_reason")
+}
+
+// E04: archived, never deleted (rule 8). The code format is a CHECK in the migration (BL08).
+model Warehouse {
+  id             String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  code           String
+  name           String
+  address        String?
+  archivedAt     DateTime? @map("archived_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  userWarehouses UserWarehouse[]
+  stockLevels    StockLevel[]
+  stockMovements StockMovement[]
+  transfersFrom  StockTransfer[] @relation("TransferFrom")
+  transfersTo    StockTransfer[] @relation("TransferTo")
+
+  @@unique([organizationId, code])
+  @@map("warehouses")
+}
+
+// E05: only Warehouse Admins and Viewers have rows. The primary key is the unique (userId, warehouseId).
+model UserWarehouse {
+  userId         String   @map("user_id") @db.Uuid
+  warehouseId    String   @map("warehouse_id") @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  warehouse    Warehouse    @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@id([userId, warehouseId])
+  @@index([organizationId])
+  @@index([warehouseId])
+  @@map("user_warehouses")
+}
+
+// E06: the SKU format is a CHECK in the migration (BL09).
+model Product {
+  id             String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String      @map("organization_id") @db.Uuid
+  sku            String
+  name           String
+  unit           ProductUnit
+  minStock       Int         @default(0) @map("min_stock")
+  archivedAt     DateTime?   @map("archived_at") @db.Timestamptz(3)
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  stockLevels    StockLevel[]
+  stockMovements StockMovement[]
+
+  @@unique([organizationId, sku])
+  @@map("products")
+}
+
+// E07: the current balance. CHECK (quantity >= 0) is in the migration, the last safety net for BL13.
+model StockLevel {
+  id             String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  warehouseId    String   @map("warehouse_id") @db.Uuid
+  productId      String   @map("product_id") @db.Uuid
+  quantity       Int
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  warehouse    Warehouse    @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([warehouseId, productId])
+  @@index([organizationId, productId])
+  @@index([organizationId, warehouseId])
+  @@map("stock_levels")
+}
+
+// E08: transfer header, always completed (no status, no updatedAt). from <> to is a CHECK in the migration.
+model StockTransfer {
+  id              String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId  String   @map("organization_id") @db.Uuid
+  code            String
+  fromWarehouseId String   @map("from_warehouse_id") @db.Uuid
+  toWarehouseId   String   @map("to_warehouse_id") @db.Uuid
+  note            String?
+  createdById     String   @map("created_by_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization  Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  fromWarehouse Warehouse       @relation("TransferFrom", fields: [fromWarehouseId], references: [id], onDelete: Restrict)
+  toWarehouse   Warehouse       @relation("TransferTo", fields: [toWarehouseId], references: [id], onDelete: Restrict)
+  createdBy     User            @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  movements     StockMovement[]
+
+  @@unique([organizationId, code])
+  @@index([fromWarehouseId])
+  @@index([toWarehouseId])
+  @@index([createdById])
+  @@map("stock_transfers")
+}
+
+// E09: append-only. A trigger in the migration rejects UPDATE and DELETE (ADR 0005).
+// importJobId is a plain nullable column without a relation: ImportJob (E11) arrives in E0-06,
+// which adds the foreign key.
+model StockMovement {
+  id             String               @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String               @map("organization_id") @db.Uuid
+  warehouseId    String               @map("warehouse_id") @db.Uuid
+  productId      String               @map("product_id") @db.Uuid
+  quantityDelta  Int                  @map("quantity_delta")
+  type           StockMovementType
+  transferId     String?              @map("transfer_id") @db.Uuid
+  importJobId    String?              @map("import_job_id") @db.Uuid
+  reason         StockMovementReason?
+  note           String?
+  createdById    String               @map("created_by_id") @db.Uuid
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  warehouse    Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  product      Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  transfer     StockTransfer? @relation(fields: [transferId], references: [id], onDelete: Restrict)
+  createdBy    User           @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  // Every composite index starts with organizationId (BL16). The first one serves the history
+  // list with cursor pagination (newest first, id as tie-breaker).
+  @@index([organizationId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([organizationId, productId, createdAt(sort: Desc)])
+  @@index([organizationId, warehouseId, createdAt(sort: Desc)])
+  @@index([transferId])
+  @@index([createdById])
+  @@map("stock_movements")
+}
+
+// E10: the unique key is the only source of truth for idempotency (BL14). resourceId points to a
+// StockTransfer, StockMovement or ImportJob depending on endpoint, so it has no foreign key.
+model IdempotencyKey {
+  organizationId String   @map("organization_id") @db.Uuid
+  key            String
+  endpoint       String
+  resourceId     String   @map("resource_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@id([organizationId, key, endpoint])
+  @@index([createdAt])
+  @@map("idempotency_keys")
 }
