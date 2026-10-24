@@ -14,6 +14,13 @@ describe("parseEnv", () => {
     expect(env.TEST_DATABASE_URL).toBeUndefined();
   });
 
+  it("treats VERCEL_GIT_COMMIT_SHA as optional", () => {
+    expect(parseEnv(validEnv).VERCEL_GIT_COMMIT_SHA).toBeUndefined();
+    expect(
+      parseEnv({ ...validEnv, VERCEL_GIT_COMMIT_SHA: "abc1234def" }).VERCEL_GIT_COMMIT_SHA,
+    ).toBe("abc1234def");
+  });
+
   it("rejects a missing DATABASE_URL", () => {
     expect(() => parseEnv({})).toThrow(/DATABASE_URL/);
   });
