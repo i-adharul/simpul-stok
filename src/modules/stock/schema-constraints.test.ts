@@ -306,7 +306,10 @@ describe("stock_movements", () => {
     it("allows import_job_id only for IMPORT, without requiring it", async () => {
       const f = await fixture();
       const base = { ...f, createdById: f.userId, warehouseId: f.warehouseA };
-      const jobId = "019db8c0-0000-7000-8000-000000000001"; // no FK yet: E0-06 adds import_jobs
+      const jobs = await prisma.$queryRaw<Row[]>`
+        INSERT INTO import_jobs (organization_id, file_name, total_rows, error_rows, rows, created_by_id)
+        VALUES (${f.orgId}::uuid, 'stok.csv', 1, 0, '[]'::jsonb, ${f.userId}::uuid) RETURNING id::text`;
+      const jobId = jobs[0].id;
       await expect(insertMovement({ ...base, type: "IMPORT" })).resolves.toBeTruthy();
       await expect(
         insertMovement({ ...base, type: "IMPORT", importJobId: jobId }),
