@@ -1,0 +1,16 @@
+### Health check (public, no session). Local server: pnpm dev
+# Expect 200 {"status":"ok","app":{"commit":null},"database":{"status":"up","latencyMs":N}}
+# The database result is cached for 60 s per server instance, so latencyMs repeats within a minute.
+GET http://localhost:3000/api/health
+
+### Health check with your own request ID (8-64 chars: letters, digits, _ and -)
+# The response header x-request-id echoes it, and the same ID appears in the server log line.
+GET http://localhost:3000/api/health
+X-Request-Id: demo-request-0001
+
+### Health check with an invalid request ID: it is replaced by a new UUID
+GET http://localhost:3000/api/health
+X-Request-Id: bad id with spaces
+
+### Production
+GET https://simpul-stok.vercel.app/api/health
