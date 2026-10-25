@@ -92,6 +92,17 @@ describe("GET /api/me", () => {
     expect((await me(get(token))).status).toBe(200);
   });
 
+  it("rejects a session issued one second before passwordChangedAt", async () => {
+    // Recent (so not expired), on a whole second, so the only difference is the second boundary.
+    const issued = new Date(Math.floor(Date.now() / 1000) * 1000 - 5_000);
+    const token = await createSessionToken(ownerId, secret, issued);
+    await prisma.user.update({
+      where: { id: ownerId },
+      data: { passwordChangedAt: new Date(issued.getTime() + 1_000) },
+    });
+    await expectUnauthenticated(await me(get(token)));
+  });
+
   it("returns 401 once the user became inactive", async () => {
     const token = await createSessionToken(ownerId, secret);
     expect((await me(get(token))).status).toBe(200);
@@ -115,6 +126,11 @@ describe("GET /api/me", () => {
 });
 
 describe("POST /api/auth/logout", () => {
+  it("still returns 204 without any session", async () => {
+    const response = await createLogoutHandler()();
+    expect(response.status).toBe(204);
+  });
+
   it("clears the cookie and is not cacheable", async () => {
     const response = await createLogoutHandler()();
     expect(response.status).toBe(204);

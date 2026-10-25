@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { checkOrigin } from "./csrf";
 
-const base = { host: "app.example.com", pathname: "/api/warehouses" };
+const base = { host: "app.example.com", scheme: "https", pathname: "/api/warehouses" };
 
 describe("checkOrigin", () => {
   it.each(["GET", "HEAD", "OPTIONS"])("does not check safe method %s", (method) => {
@@ -20,6 +20,7 @@ describe("checkOrigin", () => {
         method: "POST",
         pathname: "/api/auth/login",
         host: "simpul-stok-git-x.vercel.app",
+        scheme: "https",
         origin: "https://simpul-stok-git-x.vercel.app",
       }),
     ).toEqual({ ok: true });
@@ -31,6 +32,7 @@ describe("checkOrigin", () => {
         method: "POST",
         pathname: "/api/auth/login",
         host: "localhost:3000",
+        scheme: "http",
         origin: "http://localhost:3000",
       }),
     ).toEqual({ ok: true });
@@ -66,7 +68,13 @@ describe("checkOrigin", () => {
 
   it("rejects when the host is unknown", () => {
     expect(
-      checkOrigin({ method: "POST", pathname: "/api/x", host: null, origin: "https://a.com" }).ok,
+      checkOrigin({
+        method: "POST",
+        pathname: "/api/x",
+        host: null,
+        scheme: "https",
+        origin: "https://a.com",
+      }).ok,
     ).toBe(false);
   });
 
@@ -76,6 +84,7 @@ describe("checkOrigin", () => {
         method: "POST",
         pathname: "/api/webhooks/xendit",
         host: "a.com",
+        scheme: "https",
         origin: null,
       }),
     ).toEqual({ ok: true });
@@ -83,7 +92,26 @@ describe("checkOrigin", () => {
 
   it("does not skip look-alike paths", () => {
     expect(
-      checkOrigin({ method: "POST", pathname: "/api/webhooks-evil", host: "a.com", origin: null })
+      checkOrigin({
+        method: "POST",
+        pathname: "/api/webhooks-evil",
+        host: "a.com",
+        scheme: "https",
+        origin: null,
+      }).ok,
+    ).toBe(false);
+  });
+
+  it("rejects an http origin on an https request, same host", () => {
+    expect(checkOrigin({ ...base, method: "POST", origin: "http://app.example.com" })).toEqual({
+      ok: false,
+      reason: "origin_mismatch",
+    });
+  });
+
+  it("rejects an https origin on an http request", () => {
+    expect(
+      checkOrigin({ ...base, scheme: "http", method: "POST", origin: "https://app.example.com" })
         .ok,
     ).toBe(false);
   });

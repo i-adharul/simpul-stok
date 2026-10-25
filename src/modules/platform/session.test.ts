@@ -72,6 +72,15 @@ describe("session token", () => {
     expect(await verifySessionToken(token, secret)).toBeNull();
   });
 
+  it("rejects a validly signed token without an exp claim", async () => {
+    const token = await new SignJWT({})
+      .setProtectedHeader({ alg: "HS256" })
+      .setSubject(userId)
+      .setIssuedAt()
+      .sign(key(secret));
+    expect(await verifySessionToken(token, secret)).toBeNull();
+  });
+
   it("rejects garbage without throwing", async () => {
     expect(await verifySessionToken("not-a-token", secret)).toBeNull();
     expect(await verifySessionToken("", secret)).toBeNull();

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { checkOrigin } from "./lib/csrf";
+import { checkOrigin, requestScheme } from "./lib/csrf";
 import { errorResponse } from "./lib/api-error";
+import { log } from "./lib/logger";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./lib/request-id";
 
 // Only assigns the request ID. The proxy runs before the handler, so it cannot know the status or
@@ -14,10 +15,20 @@ export function proxy(request: NextRequest) {
     method: request.method,
     pathname: request.nextUrl.pathname,
     host: request.headers.get("x-forwarded-host") ?? request.headers.get("host"),
+    scheme: requestScheme(request.headers.get("x-forwarded-proto"), request.nextUrl.protocol),
     origin: request.headers.get("origin"),
   });
   if (!check.ok) {
+    // Proxy runs on the Node.js runtime, so the shared logger works here. Only method, path and
+    // reason: never headers, cookies or body.
+    log("warn", "csrf.rejected", {
+      requestId,
+      method: request.method,
+      path: request.nextUrl.pathname,
+      reason: check.reason,
+    });
     const denied = errorResponse(403, "CSRF_REJECTED", "Request origin is not allowed.");
+    denied.headers.set("Cache-Control", "no-store");
     denied.headers.set(REQUEST_ID_HEADER, requestId);
     return denied;
   }
