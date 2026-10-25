@@ -2,8 +2,9 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/prisma/client";
 import { env } from "./env";
 
-// Base client for NON-tenant queries only (the health check). Tenant data must go through the
-// tenant-scoped client (CLAUDE.md rule 3), which will be built on top of this one.
+// Base client for NON-tenant queries only (health check, authentication). Tenant data must go
+// through the tenant-scoped client (CLAUDE.md rule 3), built on top of this one in
+// modules/platform/tenant-client.ts. Only the files in eslint.config.mjs may import this.
 //
 // Serverless: each Vercel instance keeps a tiny pool (max 2) so many instances do not exhaust
 // Neon's pooler. The 10 s connection timeout covers a Neon compute waking from idle.
