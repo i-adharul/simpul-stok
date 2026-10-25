@@ -9,20 +9,15 @@ const CSP = [
   "form-action 'self'",
 ].join("; ");
 
-export function securityHeaders(production: boolean): Header[] {
-  const headers: Header[] = [
+export function securityHeaders(): Header[] {
+  return [
     { key: "X-Content-Type-Options", value: "nosniff" },
     { key: "X-Frame-Options", value: "DENY" },
     { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
     { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
     { key: "Content-Security-Policy", value: CSP },
+    // Browsers ignore HSTS received over plain http, so the dev server is not pinned to https.
+    // Sent unconditionally to avoid reading process.env in next.config.ts (CLAUDE.md rule 5).
+    { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
   ];
-  // HSTS on http://localhost would pin the browser to https for the dev server.
-  if (production) {
-    headers.push({
-      key: "Strict-Transport-Security",
-      value: "max-age=63072000; includeSubDomains",
-    });
-  }
-  return headers;
 }
