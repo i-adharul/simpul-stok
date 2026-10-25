@@ -1,4 +1,4 @@
-import { internalError } from "./api-error";
+import { ApiError, internalError } from "./api-error";
 import { errorFields, log } from "./logger";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./request-id";
 
@@ -42,8 +42,13 @@ export function withApiLog<Args extends unknown[]>(
     try {
       response = await handler(request, ...args);
     } catch (error) {
-      failure = errorFields(error);
-      response = internalError();
+      if (error instanceof ApiError) {
+        // Expected failure (validation, 404, 409...): map it, no error log fields.
+        response = error.toResponse();
+      } else {
+        failure = errorFields(error);
+        response = internalError();
+      }
     }
 
     response = withRequestId(response, requestId);

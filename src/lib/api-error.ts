@@ -65,3 +65,21 @@ export function subscriptionReadOnly(
 export function internalError(message = "Terjadi kesalahan pada server.") {
   return errorResponse(500, ERROR_CODES.INTERNAL_ERROR, message);
 }
+
+// A known, expected failure. Services and handlers throw it; withApiLog turns it into the BL29
+// response, so no layer builds an error Response by hand and anything else becomes a 500.
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: ErrorCode,
+    message: string,
+    readonly details: unknown = null,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+
+  toResponse(): Response {
+    return errorResponse(this.status, this.code, this.message, this.details);
+  }
+}
