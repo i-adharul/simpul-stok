@@ -45,7 +45,7 @@ src/
     env-schema.ts      Zod schema and parseEnv() (pure, testable)
     env.ts             Validated `env` object (parses process.env once)
     db.ts              Prisma client (pg adapter, small pool) and pingDatabase()
-    api-handler.ts     withApiLog(): request log, request ID header, 500 without stack
+    api-handler.ts     withApiLog(): validates body/query/params with Zod before the handler, request log, request ID header, 500 without stack
     logger.ts          One-JSON-line logger that redacts secret field names
     request-id.ts      Accepts a valid x-request-id or creates a UUID
     csrf.ts            Origin check for write requests (pure, testable)
@@ -107,6 +107,8 @@ access. Only the last layer talks to Prisma.
 13. Dates are stored in UTC and shown in WIB. Numbers use Indonesian formatting in the UI.
 14. Every API Route Handler is wrapped in `withApiLog`. A dynamic route must pass its route label
     (`withApiLog(handler, { route: "/api/invitations/[token]" })`) so a token in the URL never reaches the log.
+    Input is validated by `withApiLog` options (`body`, `query`, `params` Zod schemas) before the handler runs; a
+    POST, PUT, PATCH or DELETE route must pass `body: schema` or `body: "none"`, otherwise it fails closed.
 15. The session is read only through `getCurrentUser` (`src/modules/platform/current-user.ts`). No handler
     parses the session cookie itself.
 
