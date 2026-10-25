@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { ApiError, ERROR_CODES } from "./api-error";
-import { withApiLog } from "./api-handler";
+import { hasRouteLabel, withApiLog } from "./api-handler";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -255,5 +255,93 @@ describe("withApiLog error mapping", () => {
     const response = await handler(request());
     expect(response.status).toBe(500);
     expect(JSON.stringify(await response.json())).not.toContain("boom");
+  });
+});
+
+describe("withApiLog guard", () => {
+  const post = (body: string) =>
+    new Request("http://localhost/api/thing", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    });
+
+  it("runs the guard before the input is validated: 401 wins over 400", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const handler = vi.fn(async () => Response.json({ ok: true }));
+    const route = withApiLog(handler, {
+      body: z.object({ name: z.string() }),
+      guard: async () => {
+        throw new ApiError(401, ERROR_CODES.UNAUTHENTICATED, "Sesi tidak valid.");
+      },
+    });
+
+    const response = await route(post(JSON.stringify({ name: 5 })));
+
+    expect(response.status).toBe(401);
+    expect(handler).not.toHaveBeenCalled();
+    expect(JSON.stringify(await response.json())).not.toContain("name");
+  });
+
+  it("does not even parse the body when the guard fails", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const route = withApiLog(async () => new Response(null), {
+      body: z.object({}),
+      guard: async () => {
+        throw new ApiError(403, ERROR_CODES.FORBIDDEN, "Tidak boleh.");
+      },
+    });
+    expect((await route(post("not json"))).status).toBe(403);
+  });
+
+  it("validates after the guard and hands the guard result to the handler", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const route = withApiLog(
+      async (_request, input, _context, guarded) =>
+        Response.json({ name: input.body.name, who: guarded.who }),
+      { body: z.object({ name: z.string() }), guard: async () => ({ who: "me" }) },
+    );
+
+    expect((await route(post(JSON.stringify({ name: 5 })))).status).toBe(400);
+    const ok = await route(post(JSON.stringify({ name: "x" })));
+    expect(await ok.json()).toEqual({ name: "x", who: "me" });
+  });
+
+  it("turns an unexpected guard error into a 500 without a stack", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const route = withApiLog(async () => new Response(null), {
+      guard: async () => {
+        throw new Error("db down");
+      },
+    });
+    const response = await route(request());
+    expect(response.status).toBe(500);
+    expect(JSON.stringify(await response.json())).not.toContain("db down");
+  });
+
+  it("leaves routes without a guard unchanged", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const route = withApiLog(async (_r, _i, _c, guarded) =>
+      Response.json({ guarded: guarded ?? null }),
+    );
+    expect(await (await route(request())).json()).toEqual({ guarded: null });
+  });
+});
+
+describe("hasRouteLabel", () => {
+  it("accepts a static route without a label", () => {
+    expect(hasRouteLabel("auth/login/route.ts", {})).toBe(true);
+  });
+
+  it("requires a label for a dynamic segment", () => {
+    expect(hasRouteLabel("invitations/[token]/route.ts", {})).toBe(false);
+    expect(hasRouteLabel("warehouses/[id]/stock/route.ts", {})).toBe(false);
+    expect(
+      hasRouteLabel("invitations/[token]/route.ts", { route: "/api/invitations/[token]" }),
+    ).toBe(true);
+  });
+
+  it("also understands a Windows path", () => {
+    expect(hasRouteLabel("invitations\\[token]\\route.ts", {})).toBe(false);
   });
 });

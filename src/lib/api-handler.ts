@@ -7,7 +7,7 @@ const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 type Schema = z.ZodType;
 
-type ApiOptions = {
+export type ApiOptions = {
   // Route pattern such as "/api/invitations/[token]". Required for dynamic routes: the real
   // pathname can carry a secret (an invitation token) and must not reach the log.
   route?: string;
@@ -20,6 +20,10 @@ type ApiOptions = {
   // describe the rules a value failed (for example password rules).
   invalidMessage?: string;
   hideIssues?: boolean;
+  // Runs BEFORE the input is read or validated, so a caller who may not use the route (401, 403)
+  // learns nothing about its body. Its result reaches the handler as the 4th argument. Used by
+  // withTenantRoute to resolve the request context first.
+  guard?: (request: Request) => Promise<unknown>;
 };
 
 type Output<S> = S extends Schema ? z.output<S> : undefined;
@@ -31,8 +35,13 @@ export type ApiInput<O extends ApiOptions> = {
   params: Output<O["params"]>;
 };
 
+// What the guard returned. A route without a guard gets `undefined`.
+type Guarded<O extends ApiOptions> = O["guard"] extends (request: Request) => Promise<infer G>
+  ? G
+  : undefined;
+
 // Route context of the Next.js App Router (only `params` is used here).
-type RouteContext = { params: Promise<unknown> };
+export type RouteContext = { params: Promise<unknown> };
 
 const INVALID_MESSAGE = "Data yang dikirim tidak valid.";
 
@@ -107,6 +116,12 @@ export function hasValidationDecision(method: string, options: ApiOptions): bool
   return !WRITE_METHODS.has(method) || options.body !== undefined;
 }
 
+// A route file under a dynamic segment ("[token]") must pass its route pattern, because the real
+// pathname can carry a secret. Checked by route-validation.test.ts.
+export function hasRouteLabel(routeFile: string, options: ApiOptions): boolean {
+  return !/\[[^\]]+\]/.test(routeFile) || options.route !== undefined;
+}
+
 // Sets the header, or on a copy when the response is immutable (a Response from fetch or
 // Response.redirect). The copy keeps status, statusText, headers and body.
 function withRequestId(response: Response, requestId: string): Response {
@@ -123,12 +138,17 @@ function withRequestId(response: Response, requestId: string): Response {
 // Wraps a Route Handler because only here the final status and duration are known (the proxy runs
 // before the handler). It also validates the input first, so no handler can forget to, and turns an
 // unhandled error into the BL29 format without a stack.
-// The handler receives (request, validated input, route context).
+// The handler receives (request, validated input, route context, guard result).
 export function withApiLog<
   const O extends ApiOptions = ApiOptions,
   Context extends RouteContext = RouteContext,
 >(
-  handler: (request: Request, input: ApiInput<O>, context: Context) => Promise<Response> | Response,
+  handler: (
+    request: Request,
+    input: ApiInput<O>,
+    context: Context,
+    guarded: Guarded<O>,
+  ) => Promise<Response> | Response,
   options: O = {} as O,
 ): ((request: Request, context?: Context) => Promise<Response>) & { apiOptions: O } {
   const wrapped = async (request: Request, context?: Context): Promise<Response> => {
@@ -146,8 +166,9 @@ export function withApiLog<
       if (!hasValidationDecision(request.method, options)) {
         throw new Error(`${request.method} ${base.path} has no body validation decision`);
       }
+      const guarded = (await options.guard?.(request)) as Guarded<O>;
       const input = (await parseInput(request, context, options)) as ApiInput<O>;
-      response = await handler(request, input, context as Context);
+      response = await handler(request, input, context as Context, guarded);
     } catch (error) {
       if (error instanceof ApiError) {
         // Expected failure (validation, 404, 409...): map it, no error log fields.
