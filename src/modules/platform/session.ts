@@ -38,6 +38,8 @@ export async function verifySessionToken(
     const { payload } = await jwtVerify(token, toKey(secret), {
       algorithms: [ALGORITHM],
       currentDate: now,
+      // A validly signed token without exp would never expire, so exp is mandatory.
+      requiredClaims: ["sub", "iat", "exp"],
     });
     if (typeof payload.sub !== "string" || typeof payload.iat !== "number") return null;
     return { userId: payload.sub, issuedAt: new Date(payload.iat * 1000) };
@@ -54,4 +56,9 @@ export function sessionCookieOptions() {
     path: "/",
     maxAge: SESSION_MAX_AGE_SECONDS,
   };
+}
+
+// Same attributes as the login cookie (the __Host- prefix demands them) with an immediate expiry.
+export function clearedSessionCookieOptions() {
+  return { ...sessionCookieOptions(), maxAge: 0 };
 }
