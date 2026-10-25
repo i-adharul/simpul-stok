@@ -6,10 +6,17 @@ describe("safeRedirectPath", () => {
     expect(safeRedirectPath("/platform")).toBe("/platform");
   });
 
-  it.each(["https://evil.test", "//evil.test", "/\\evil.test", "dashboard", "", null, 5])(
-    "falls back for %s",
-    (target) => {
-      expect(safeRedirectPath(target)).toBe("/dashboard");
-    },
-  );
+  it.each([
+    "https://evil.test",
+    "//evil.test",
+    "/\\evil.test",
+    "/\t/evil.test",
+    "/\n/evil.test",
+    "dashboard",
+    "",
+    null,
+    5,
+  ])("falls back for %s", (target) => {
+    expect(safeRedirectPath(target)).toBe("/dashboard");
+  });
 });

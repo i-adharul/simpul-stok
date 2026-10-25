@@ -2,6 +2,12 @@
 // so a tampered response can never send the user to another site (open redirect).
 export function safeRedirectPath(target: unknown, fallback = "/dashboard"): string {
   if (typeof target !== "string") return fallback;
-  if (!target.startsWith("/") || target.startsWith("//") || target.includes("\\")) return fallback;
+  if (
+    !target.startsWith("/") ||
+    target.startsWith("//") ||
+    target.includes("\\") ||
+    /[\u0000-\u001f]/.test(target)
+  )
+    return fallback;
   return target;
 }
