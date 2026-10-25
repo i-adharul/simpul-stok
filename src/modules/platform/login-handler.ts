@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { PrismaClient } from "../../generated/prisma/client";
 import { errorResponse } from "../../lib/api-error";
+import { noStore } from "./auth-response";
 import { loginSchema } from "./auth-schema";
 import { login } from "./auth-service";
 import { SESSION_COOKIE_NAME, createSessionToken, sessionCookieOptions } from "./session";
@@ -14,13 +15,13 @@ export function createLoginHandler({ prisma, secret }: Deps) {
     const input = await parseBody(request);
     if (!input.success) {
       // No `details`: field-level hints are not needed here and must not describe the password rules.
-      return errorResponse(400, "VALIDATION_ERROR", "Email dan password wajib diisi.");
+      return noStore(errorResponse(400, "VALIDATION_ERROR", "Email dan password wajib diisi."));
     }
 
     const result = await login(prisma, input.data);
     if (!result.ok) {
       // One answer for unknown email, wrong password, inactive user and over-long password.
-      return errorResponse(401, "INVALID_CREDENTIALS", "Email atau password salah.");
+      return noStore(errorResponse(401, "INVALID_CREDENTIALS", "Email atau password salah."));
     }
 
     const token = await createSessionToken(result.user.id, secret);

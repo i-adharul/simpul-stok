@@ -63,3 +63,12 @@ POST http://localhost:3000/api/auth/login
 Content-Type: application/json
 
 not json
+
+### Current user (send the cookie from login; in VS Code REST Client use a named request or paste it)
+# Expect 200 {"user":{...},"organization":{...}}; without a valid session 401 {"code":"UNAUTHENTICATED",...}
+GET http://localhost:3000/api/me
+Cookie: __Host-simpul_session=<token from login>
+
+### Logout
+# Expect 204 and Set-Cookie: __Host-simpul_session=; Max-Age=0
+POST http://localhost:3000/api/auth/logout
