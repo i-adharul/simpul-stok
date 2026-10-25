@@ -2,14 +2,15 @@ import Link from "next/link";
 import { Bell, Menu, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { roleLabel, type MeResponse } from "./shell-user";
 
 type TopBarProps = {
-  userName: string;
-  userRole: string;
+  me: MeResponse | undefined;
   onOpenMenu: () => void;
 };
 
-export function TopBar({ userName, userRole, onOpenMenu }: TopBarProps) {
+export function TopBar({ me, onOpenMenu }: TopBarProps) {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-card px-4 md:px-6">
       <Button
@@ -32,14 +33,18 @@ export function TopBar({ userName, userRole, onOpenMenu }: TopBarProps) {
         <Button variant="ghost" size="icon" aria-label="Notifikasi">
           <Bell />
         </Button>
-        <Link
-          href="/profile"
-          aria-label="Profil saya"
-          className="text-right leading-tight hover:opacity-80 max-sm:sr-only"
-        >
-          <p className="text-sm font-semibold">{userName}</p>
-          <p className="text-xs text-muted-foreground">{userRole}</p>
-        </Link>
+        {me ? (
+          <Link
+            href="/profile"
+            aria-label="Profil saya"
+            className="text-right leading-tight hover:opacity-80 max-sm:sr-only"
+          >
+            <p className="text-sm font-semibold">{me.user.name}</p>
+            <p className="text-xs text-muted-foreground">{roleLabel(me.user.role)}</p>
+          </Link>
+        ) : (
+          <Skeleton className="h-8 w-28 max-sm:hidden" />
+        )}
       </div>
     </header>
   );

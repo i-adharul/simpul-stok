@@ -1,14 +1,8 @@
 import { Lock } from "lucide-react";
+import { roleLabel } from "@/components/app-shell/shell-user";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getServerUser } from "@/modules/platform/server-session";
 import { ChangePasswordDialog } from "./change-password-dialog";
-
-const ROLE_LABELS: Record<string, string> = {
-  PLATFORM_ADMIN: "Admin Platform",
-  OWNER: "Owner",
-  WAREHOUSE_ADMIN: "Admin Gudang",
-  VIEWER: "Viewer",
-};
 
 function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
@@ -45,7 +39,7 @@ export default async function ProfilePage() {
         <CardContent className="space-y-4">
           <ReadOnlyField label="Nama lengkap" value={user.name} />
           <ReadOnlyField label="Alamat email" value={user.email} />
-          <ReadOnlyField label="Peran" value={ROLE_LABELS[user.role] ?? user.role} />
+          <ReadOnlyField label="Peran" value={roleLabel(user.role)} />
           {organization && <ReadOnlyField label="Organisasi" value={organization.name} />}
         </CardContent>
       </Card>

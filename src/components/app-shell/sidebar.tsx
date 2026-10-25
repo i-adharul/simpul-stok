@@ -1,12 +1,15 @@
+import { Skeleton } from "@/components/ui/skeleton";
 import { SidebarNav } from "./sidebar-nav";
+import { organizationLabel, type MeResponse } from "./shell-user";
+import { UserCard } from "./user-card";
 
 type SidebarProps = {
-  organizationName: string;
+  me: MeResponse | undefined;
   onNavigate?: () => void;
 };
 
 // Shared by the fixed desktop sidebar and the mobile drawer.
-export function Sidebar({ organizationName, onNavigate }: SidebarProps) {
+export function Sidebar({ me, onNavigate }: SidebarProps) {
   return (
     <div className="flex h-full flex-col gap-5 bg-sidebar p-4">
       <div className="flex items-center gap-2 px-1">
@@ -19,9 +22,14 @@ export function Sidebar({ organizationName, onNavigate }: SidebarProps) {
         </span>
       </div>
       <div className="rounded-lg border bg-card px-3 py-2">
-        <p className="truncate text-sm font-semibold">{organizationName}</p>
+        {me ? (
+          <p className="truncate text-sm font-semibold">{organizationLabel(me)}</p>
+        ) : (
+          <Skeleton className="h-5 w-32" />
+        )}
       </div>
       <SidebarNav onNavigate={onNavigate} />
+      <UserCard me={me} />
     </div>
   );
 }
