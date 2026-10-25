@@ -23,11 +23,11 @@ describe("formatNumber", () => {
 
 describe("formatRupiah", () => {
   it("prefixes Rp and separates it from the digits with a non-breaking space", () => {
-    expect(formatRupiah(1500000)).toBe("Rp 1.500.000");
+    expect(formatRupiah(1500000)).toBe("Rp\u00a01.500.000");
   });
 
   it("shows zero", () => {
-    expect(formatRupiah(0)).toBe("Rp 0");
+    expect(formatRupiah(0)).toBe("Rp\u00a00");
   });
 });
 

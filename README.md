@@ -56,36 +56,39 @@ pnpm prisma db seed
 pnpm dev
 ```
 
-> Script names must match `package.json`. Adjust this block once E0-02 and E0-07 are done.
-
 ## Production migrations
 
 Migrations are never run by the Vercel build. The app connects to Neon through the **pooled**
 connection string (host contains `-pooler`); migrations need the **direct** one (no `-pooler`).
 Both are in the Neon Console under **Connect**. See [ADR 0007](docs/decisions/0007-neon-vercel-connection-strategy.md).
 
-After a pull request that adds a migration is merged, run this from your laptop, once for **each**
+After a pull request that adds a migration is merged, run this from your laptop (zsh), once for **each**
 Neon branch (`production` and `preview`):
 
 ```bash
-DATABASE_URL='postgresql://...direct-connection-string...' pnpm prisma migrate deploy
+read -s "NEON_DIRECT?Neon direct URL: "; echo
+DATABASE_URL="$NEON_DIRECT" pnpm prisma migrate deploy
+unset NEON_DIRECT
 ```
 
-- Put the variable in front of the command, as above. Do not `export` it and do not write it to `.env`,
-  so the production credential does not stay in your shell or in a file.
+In bash, the first line is `read -s -p "Neon direct URL: " NEON_DIRECT; echo`.
+
+- Use the hidden prompt. A command that contains the connection string is saved in your terminal history,
+  so the credential would stay there. With `read -s` the string is typed without echo, lives only in a
+  shell variable, and `unset` removes it. Do not write it to `.env`.
 - `migrate deploy` only applies existing migrations. Never run `migrate dev` or `migrate reset` against Neon.
 - Never run the seed against Neon. `pnpm prisma db seed` refuses a non-local database on purpose.
-- Check the result with `pnpm prisma migrate status` (same `DATABASE_URL` prefix): it must say
+- Check the result with `pnpm prisma migrate status` (same prompt and `DATABASE_URL="$NEON_DIRECT"` prefix): it must say
   "Database schema is up to date".
 
 ## Roadmap
 
-| Milestone | Scope                                                                          | Status                      |
-| --------- | ------------------------------------------------------------------------------ | --------------------------- |
-| M1        | Core inventory online: auth, warehouses, products, stock, transfers, dashboard | In progress (E0 Foundation) |
-| M2        | SaaS: organizations, plans, Xendit sandbox billing, platform admin             | Planned                     |
-| M3        | Extras: import/export, notifications, audit log, Row-Level Security            | Planned                     |
-| M4        | Portfolio polish: demo data, docs, security review                             | Planned                     |
+| Milestone | Scope                                                                          | Status                |
+| --------- | ------------------------------------------------------------------------------ | --------------------- |
+| M1        | Core inventory online: auth, warehouses, products, stock, transfers, dashboard | In progress (E1 next) |
+| M2        | SaaS: organizations, plans, Xendit sandbox billing, platform admin             | Planned               |
+| M3        | Extras: import/export, notifications, audit log, Row-Level Security            | Planned               |
+| M4        | Portfolio polish: demo data, docs, security review                             | Planned               |
 
 ## Documentation
 

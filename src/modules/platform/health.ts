@@ -1,4 +1,4 @@
-import { errorFields, log } from "../../lib/logger";
+import { log } from "../../lib/logger";
 
 export type HealthResult = { up: boolean; latencyMs: number };
 
@@ -6,6 +6,8 @@ type HealthCheckerOptions = {
   ping: () => Promise<void>;
   now: () => number;
   ttlMs: number;
+  // Shorter than ttlMs so a recovered database is noticed sooner than a healthy one is re-checked.
+  failureTtlMs?: number;
   timeoutMs: number;
 };
 
@@ -20,11 +22,30 @@ function withTimeout(promise: Promise<void>, timeoutMs: number): Promise<void> {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-// The last result is kept in memory for ttlMs. Why: a bot or uptime monitor calling /api/health
+// Deliberately no stack and no message: the message can carry a host or address, and the stack
+// only repeats file paths. The name, Prisma code (such as P1001) and cause name are enough to
+// tell a refused connection from a timeout.
+function downFields(error: unknown): Record<string, unknown> {
+  if (!(error instanceof Error)) return { errorName: "NonError" };
+  const { code, meta } = error as {
+    code?: unknown;
+    meta?: { driverAdapterError?: { name?: unknown } };
+  };
+  const causeName = meta?.driverAdapterError?.name;
+  return {
+    errorName: error.name,
+    ...(typeof code === "string" && /^P\d{4}$/.test(code) ? { prismaCode: code } : {}),
+    ...(typeof causeName === "string" ? { causeName } : {}),
+  };
+}
+
+// The last result is kept in memory for ttlMs (failureTtlMs after a failure). Why: a bot or uptime monitor calling /api/health
 // every few seconds would otherwise keep the Neon compute awake and burn the free 100 CU-hours.
-// Failures are cached too, so a dead database is not pinged by every caller. The cache lives per
-// server instance; that is enough for this purpose.
+// Failures are cached too, but for less time, so a dead database is not pinged by every caller
+// yet a recovery shows up within seconds. The cache lives per server instance; that is enough for
+// this purpose.
 export function createHealthChecker(options: HealthCheckerOptions): () => Promise<HealthResult> {
+  const failureTtlMs = options.failureTtlMs ?? 15_000;
   let last: { result: HealthResult; at: number } | undefined;
   let inFlight: Promise<HealthResult> | undefined;
 
@@ -35,7 +56,7 @@ export function createHealthChecker(options: HealthCheckerOptions): () => Promis
       await withTimeout(options.ping(), options.timeoutMs);
     } catch (error) {
       up = false;
-      log("warn", "health.database_down", errorFields(error));
+      log("warn", "health.database_down", downFields(error));
     }
     const result = { up, latencyMs: options.now() - startedAt };
     last = { result, at: options.now() };
@@ -43,7 +64,9 @@ export function createHealthChecker(options: HealthCheckerOptions): () => Promis
   }
 
   return async () => {
-    if (last && options.now() - last.at < options.ttlMs) return last.result;
+    if (last && options.now() - last.at < (last.result.up ? options.ttlMs : failureTtlMs)) {
+      return last.result;
+    }
     // Simultaneous callers share one ping.
     inFlight ??= run().finally(() => {
       inFlight = undefined;
