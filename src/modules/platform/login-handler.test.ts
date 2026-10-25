@@ -58,6 +58,14 @@ describe("POST login: success", () => {
     expect(cookie).not.toMatch(/Domain=/i);
   });
 
+  it("ignores email case end to end (schema and service)", async () => {
+    const response = await handler(
+      post({ email: owner.email.toUpperCase(), password: owner.password }),
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).user.email).toBe(owner.email);
+  });
+
   it("signs a token for exactly this user, and never puts it in the body", async () => {
     const response = await handler(post({ email: owner.email, password: owner.password }));
     const cookie = response.headers.get("set-cookie")!;
