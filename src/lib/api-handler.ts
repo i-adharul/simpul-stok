@@ -1,3 +1,4 @@
+import { internalError } from "./api-error";
 import { errorFields, log } from "./logger";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./request-id";
 
@@ -42,10 +43,7 @@ export function withApiLog<Args extends unknown[]>(
       response = await handler(request, ...args);
     } catch (error) {
       failure = errorFields(error);
-      response = Response.json(
-        { code: "INTERNAL_ERROR", message: "Terjadi kesalahan pada server.", details: null },
-        { status: 500 },
-      );
+      response = internalError();
     }
 
     response = withRequestId(response, requestId);
