@@ -10,3 +10,12 @@ export const loginSchema = z.object({
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
+
+// Shape only. The password rules (validatePassword) run in the service, after the current password
+// is verified, so a caller without the current password learns nothing about the rules.
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: z.string().min(1).max(128),
+});
+
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;

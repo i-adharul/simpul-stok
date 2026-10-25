@@ -72,3 +72,35 @@ Cookie: __Host-simpul_session=<token from login>
 ### Logout
 # Expect 204 and Set-Cookie: __Host-simpul_session=; Max-Age=0
 POST http://localhost:3000/api/auth/logout
+
+### Change own password (S17/P17). Needs the session cookie; any role, any subscription state (BL23)
+# Expect 204 and a new Set-Cookie. Sessions created before this call (other devices) get 401 afterwards.
+# Restore the seed password afterwards (re-run the seed) or the other requests in this file will fail.
+PATCH http://localhost:3000/api/me/password
+Content-Type: application/json
+Cookie: __Host-simpul_session=<token from login>
+
+{ "currentPassword": "owner-demo-2026", "newPassword": "kopi-senja-baru-77" }
+
+### Change password: wrong current password
+# Expect 400 {"code":"INVALID_CURRENT_PASSWORD","message":"Password saat ini salah.","details":null}
+PATCH http://localhost:3000/api/me/password
+Content-Type: application/json
+Cookie: __Host-simpul_session=<token from login>
+
+{ "currentPassword": "salah-banget-1", "newPassword": "kopi-senja-baru-77" }
+
+### Change password: new password breaks the rules
+# Expect 400 {"code":"VALIDATION_ERROR","message":"Password terlalu umum.","details":{"field":"newPassword"}}
+PATCH http://localhost:3000/api/me/password
+Content-Type: application/json
+Cookie: __Host-simpul_session=<token from login>
+
+{ "currentPassword": "owner-demo-2026", "newPassword": "password123" }
+
+### Change password without a session
+# Expect 401 UNAUTHENTICATED
+PATCH http://localhost:3000/api/me/password
+Content-Type: application/json
+
+{ "currentPassword": "owner-demo-2026", "newPassword": "kopi-senja-baru-77" }
