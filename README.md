@@ -116,6 +116,11 @@ Product and technical documents are in [`docs/`](docs/).
 - A single session cannot be revoked: sessions are signed cookies without a database table, and logging out only
   deletes the cookie. A user is cut off by deactivation or a password change, and every session ends after 8 hours
   ([ADR 0009](docs/decisions/0009-stateless-signed-session.md)).
+- The Content-Security-Policy has no `script-src` yet: it needs a per-request nonce, planned for the M4
+  security review.
+- Every write request from a non-browser client (curl, REST clients) must send an `Origin` header equal to
+  the server's own scheme and host, or the CSRF check answers 403. Example:
+  `curl -X POST http://localhost:3000/api/auth/logout -H "Origin: http://localhost:3000"`
 - Request logs (status, duration) cover API routes only; pages get a request ID but no log line.
 - The free Neon database sleeps after 5 minutes without queries, so the first request after a pause is slower.
 - No email delivery; invitations and password resets use links that are copied manually.

@@ -1,3 +1,7 @@
+# Every write request (POST, PATCH, PUT, DELETE) from a non-browser client must send an Origin header equal to
+# the server's own scheme and host, e.g. "Origin: http://localhost:3000" locally. Without it the CSRF check
+# answers 403. curl: curl -X POST http://localhost:3000/api/auth/logout -H "Origin: http://localhost:3000"
+
 ### Login as the demo Owner (seed account). Local server: pnpm dev
 # Expect 200 {"user":{...,"role":"OWNER"},"redirectTo":"/dashboard"}
 # Response header: Set-Cookie: __Host-simpul_session=<token>; Max-Age=28800; Path=/; HttpOnly; Secure; SameSite=lax
@@ -106,7 +110,7 @@ Content-Type: application/json
 { "currentPassword": "owner-demo-2026", "newPassword": "kopi-senja-baru-77" }
 
 ### CSRF: a write with a foreign Origin is rejected (E1-06)
-# Expect 403 {"code":"CSRF_REJECTED",...}. A write with no Origin header is also 403; curl/REST clients must send one.
+# Expect 403 {"code":"CSRF_REJECTED",...}. A write with no Origin header is also 403; an http Origin against an https host is rejected too.
 POST http://localhost:3000/api/auth/login
 Origin: https://evil.example
 Content-Type: application/json
