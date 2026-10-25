@@ -1,7 +1,7 @@
 import { readdirSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { hasValidationDecision } from "../../lib/api-handler";
+import { hasRouteLabel, hasValidationDecision } from "../../lib/api-handler";
 
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 const apiDir = path.join(__dirname);
@@ -32,6 +32,21 @@ describe("API route handlers", () => {
         expect(
           hasValidationDecision(method, route.apiOptions!),
           `${method} needs body: schema or body: "none"`,
+        ).toBe(true);
+      }
+    },
+  );
+
+  // A token in the URL (for example /api/invitations/[token]) must never reach the log.
+  it.each(files.map((file) => [path.relative(apiDir, file), file]))(
+    "%s passes its route label when the path has a dynamic segment",
+    async (name, file) => {
+      const mod = (await import(file)) as Record<string, unknown>;
+      for (const method of METHODS.filter((m) => m in mod)) {
+        const route = mod[method] as { apiOptions: Parameters<typeof hasRouteLabel>[1] };
+        expect(
+          hasRouteLabel(name, route.apiOptions),
+          `${method} in ${name} needs the route option, for example { route: "/api/x/[id]" }`,
         ).toBe(true);
       }
     },

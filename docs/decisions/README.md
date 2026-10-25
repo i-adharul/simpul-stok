@@ -14,3 +14,4 @@ One file per decision. A decision that is replaced stays in the list with its st
 | 0008 | [Vercel function region matches the Neon region](0008-vercel-region-matches-neon.md)                                                  | accepted | E0-08 |
 | 0009 | [Stateless signed session cookie (no session table)](0009-stateless-signed-session.md)                                                | accepted | E1-02 |
 | 0010 | [CSRF protection by an Origin check in the proxy](0010-csrf-origin-check-in-proxy.md)                                                 | accepted | E1-06 |
+| 0011 | [Tenant isolation by a Prisma client extension, enforced by lint and a route guard](0011-tenant-scoped-client-and-lint.md)            | accepted | E2-04 |

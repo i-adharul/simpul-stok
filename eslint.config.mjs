@@ -3,11 +3,100 @@ import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import prettier from "eslint-config-prettier/flat";
 
+// CLAUDE.md rule 3: tenant data is reached only through the tenant-scoped client
+// (src/modules/platform/tenant-client.ts). These are the ONLY files that may import the plain Prisma
+// client (`@/lib/db`) or the PrismaClient type, so a service cannot receive or build an unscoped
+// client. One list, one reason per entry. Adding an entry is a security decision: say why.
+const PLAIN_CLIENT_ALLOWLIST = [
+  { files: ["src/lib/db.ts"], reason: "creates the plain client" },
+  {
+    files: ["src/modules/platform/tenant-client.ts"],
+    reason: "builds the tenant-scoped client on top of the plain one",
+  },
+  {
+    files: ["src/modules/platform/tenant-route.ts"],
+    reason: "withTenantRoute resolves the request context and builds the tenant client per request",
+  },
+  {
+    files: [
+      "src/modules/platform/current-user.ts",
+      "src/modules/platform/request-context.ts",
+      "src/modules/platform/server-session.ts",
+    ],
+    reason: "read the session and its user before any organization (and tenant client) exists",
+  },
+  {
+    files: [
+      "src/modules/platform/auth-service.ts",
+      "src/modules/platform/login-handler.ts",
+      "src/modules/platform/me-handler.ts",
+      "src/modules/platform/password-change.ts",
+      "src/modules/platform/password-change-handler.ts",
+      "src/app/api/auth/**",
+      // Listed one by one: a new route under /api/me/ must fail lint until it is added here.
+      "src/app/api/me/route.ts",
+      "src/app/api/me/password/route.ts",
+    ],
+    reason: "login, logout, /me and password change: authentication, not tenant data",
+  },
+  { files: ["src/app/api/health/**"], reason: "health check, touches no tenant data" },
+  {
+    files: ["prisma/seed.ts", "src/modules/platform/seed.ts"],
+    reason: "bootstrap script, has no session; refuses a non-local database",
+  },
+  {
+    files: ["**/*.test.ts", "src/test/**"],
+    reason: "tests arrange and inspect data across organizations on purpose",
+  },
+];
+
+// Raw SQL skips every tenant filter. To allow it somewhere, add an entry that cites the ADR that
+// accepts the risk (for example reason: "ADR 0012: report query"). Do not add one without an ADR.
+const RAW_SQL_ALLOWLIST = [
+  { files: ["src/lib/db.ts"], reason: "pingDatabase (SELECT 1), no tenant data" },
+  { files: ["**/*.test.ts", "src/test/**"], reason: "tests truncate and inspect tables" },
+];
+
+const filesOf = (allowlist) => allowlist.flatMap((entry) => entry.files);
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   // Must stay last among the rule sets: it turns off rules that conflict with Prettier.
   prettier,
+  {
+    files: ["**/*.{ts,tsx,mts}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/lib/db", "**/lib/db", "**/lib/db.ts"],
+              message:
+                "The plain Prisma client is for the allowlisted files only (eslint.config.mjs). Use the tenant client from the request: withTenantRoute gives you `db` (CLAUDE.md rule 3).",
+            },
+            {
+              group: ["**/generated/prisma/client", "**/generated/prisma", "@prisma/client"],
+              importNames: ["PrismaClient"],
+              message:
+                "Do not accept the plain PrismaClient. Take TenantClient from modules/platform/tenant-client (CLAUDE.md rule 3).",
+            },
+          ],
+        },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "MemberExpression[property.name=/^\\$(query|execute)Raw(Unsafe)?$/]",
+          message:
+            "Raw SQL skips the tenant filter (CLAUDE.md rule 3). Use the tenant client, or add an ADR-backed entry to RAW_SQL_ALLOWLIST.",
+        },
+      ],
+    },
+  },
+  { files: filesOf(PLAIN_CLIENT_ALLOWLIST), rules: { "no-restricted-imports": "off" } },
+  { files: filesOf(RAW_SQL_ALLOWLIST), rules: { "no-restricted-syntax": "off" } },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
