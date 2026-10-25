@@ -13,3 +13,4 @@ One file per decision. A decision that is replaced stays in the list with its st
 | 0007 | [Neon and Vercel connection strategy (pooled for the app, direct and manual for migrations)](0007-neon-vercel-connection-strategy.md) | accepted | E0-08 |
 | 0008 | [Vercel function region matches the Neon region](0008-vercel-region-matches-neon.md)                                                  | accepted | E0-08 |
 | 0009 | [Stateless signed session cookie (no session table)](0009-stateless-signed-session.md)                                                | accepted | E1-02 |
+| 0010 | [CSRF protection by an Origin check in the proxy](0010-csrf-origin-check-in-proxy.md)                                                 | accepted | E1-06 |

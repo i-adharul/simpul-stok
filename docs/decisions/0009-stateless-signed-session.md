@@ -47,3 +47,5 @@ password change is rejected.
 - There is no rate limiting on login in this version (deferred, listed in the README under Known
   limitations). Combined with the point above, brute force is limited only by bcrypt's cost.
 - CSRF protection for the login and other write routes (an `Origin` check) is scheduled in E1-06 (#28).
+
+Update (2026-10-25): the `Origin` check for all write requests now exists in `src/proxy.ts` (E1-06, hardened in PR #83). See [ADR 0010](0010-csrf-origin-check-in-proxy.md).

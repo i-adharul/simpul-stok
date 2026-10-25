@@ -37,8 +37,10 @@ src/
   app/                 Next.js routes, layouts and Route Handlers
   components/
     app-shell/         Sidebar, top bar and nav items
+    session/           Session-expired dialog (P19)
     states/            Empty, error and loading-skeleton patterns
     ui/                shadcn/ui base components
+    providers.tsx      Client providers (TanStack Query)
   lib/
     env-schema.ts      Zod schema and parseEnv() (pure, testable)
     env.ts             Validated `env` object (parses process.env once)
@@ -46,11 +48,16 @@ src/
     api-handler.ts     withApiLog(): request log, request ID header, 500 without stack
     logger.ts          One-JSON-line logger that redacts secret field names
     request-id.ts      Accepts a valid x-request-id or creates a UUID
+    csrf.ts            Origin check for write requests (pure, testable)
+    security-headers.ts  Security headers applied by next.config.ts
+    api-client.ts      Browser fetch wrapper (JSON, error shape, session-expired signal)
+    api-error.ts       Error response in the `{ code, message, details }` shape
+    safe-redirect.ts   Accepts only same-site relative redirect targets
     format.ts          WIB dates and Indonesian number/Rupiah formats
   modules/
     platform/          Auth, organizations, members, plans, billing, platform admin
     stock/             Warehouses, products, stock levels, movements, transfers
-  proxy.ts             Assigns the request ID before routes run
+  proxy.ts             Assigns the request ID and rejects cross-origin writes (CSRF) before routes run
   instrumentation.ts   Imports lib/env at server start so bad config stops the app
 prisma/                Schema, migrations and seed
 prisma.config.ts       Prisma CLI config (loads .env, picks the database URL)
@@ -100,6 +107,8 @@ access. Only the last layer talks to Prisma.
 13. Dates are stored in UTC and shown in WIB. Numbers use Indonesian formatting in the UI.
 14. Every API Route Handler is wrapped in `withApiLog`. A dynamic route must pass its route label
     (`withApiLog(handler, { route: "/api/invitations/[token]" })`) so a token in the URL never reaches the log.
+15. The session is read only through `getCurrentUser` (`src/modules/platform/current-user.ts`). No handler
+    parses the session cookie itself.
 
 ## Commands
 
