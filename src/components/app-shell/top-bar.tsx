@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Bell, Menu, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,10 +32,14 @@ export function TopBar({ userName, userRole, onOpenMenu }: TopBarProps) {
         <Button variant="ghost" size="icon" aria-label="Notifikasi">
           <Bell />
         </Button>
-        <div className="hidden text-right leading-tight sm:block">
+        <Link
+          href="/profile"
+          aria-label="Profil saya"
+          className="text-right leading-tight hover:opacity-80 max-sm:sr-only"
+        >
           <p className="text-sm font-semibold">{userName}</p>
           <p className="text-xs text-muted-foreground">{userRole}</p>
-        </div>
+        </Link>
       </div>
     </header>
   );

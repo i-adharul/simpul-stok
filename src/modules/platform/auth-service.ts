@@ -35,7 +35,10 @@ export async function login(prisma: PrismaClient, input: LoginInput): Promise<Lo
 }
 
 // Always performs exactly one bcrypt comparison, whatever the input.
-async function comparePassword(password: string, hash: string | undefined): Promise<boolean> {
+export async function comparePassword(
+  password: string,
+  hash: string | undefined,
+): Promise<boolean> {
   // bcrypt reads only the first 72 bytes. A longer password would match on its prefix, so it is
   // refused instead of silently truncated (decision on issue #24).
   const tooLong = new TextEncoder().encode(password).length > BCRYPT_MAX_BYTES;
