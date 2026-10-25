@@ -104,3 +104,11 @@ PATCH http://localhost:3000/api/me/password
 Content-Type: application/json
 
 { "currentPassword": "owner-demo-2026", "newPassword": "kopi-senja-baru-77" }
+
+### CSRF: a write with a foreign Origin is rejected (E1-06)
+# Expect 403 {"code":"CSRF_REJECTED",...}. A write with no Origin header is also 403; curl/REST clients must send one.
+POST http://localhost:3000/api/auth/login
+Origin: https://evil.example
+Content-Type: application/json
+
+{"email":"owner@example.com","password":"whatever-password"}
