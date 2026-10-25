@@ -35,23 +35,32 @@ Next.js here is a recent major version. Follow `AGENTS.md` and read the bundled 
 ```
 src/
   app/                 Next.js routes, layouts and Route Handlers
-  lib/                 Shared utilities
-    env-schema.ts      Zod schema and parseEnv() (pure, easy to test)
+  components/
+    app-shell/         Sidebar, top bar and nav items
+    states/            Empty, error and loading-skeleton patterns
+    ui/                shadcn/ui base components
+  lib/
+    env-schema.ts      Zod schema and parseEnv() (pure, testable)
     env.ts             Validated `env` object (parses process.env once)
-    env-schema.test.ts Unit tests live next to the code they test (`*.test.ts`)
-  instrumentation.ts   Runs at server start; imports lib/env so bad config stops the app
+    db.ts              Prisma client (pg adapter, small pool) and pingDatabase()
+    api-handler.ts     withApiLog(): request log, request ID header, 500 without stack
+    logger.ts          One-JSON-line logger that redacts secret field names
+    request-id.ts      Accepts a valid x-request-id or creates a UUID
+    format.ts          WIB dates and Indonesian number/Rupiah formats
   modules/
     platform/          Auth, organizations, members, plans, billing, platform admin
     stock/             Warehouses, products, stock levels, movements, transfers
-docker/
-  postgres-init/       SQL that runs when the local database volume is first created
-docs/
-  decisions/           Architecture decision records (ADRs)
-docker-compose.yml     Local Postgres (databases: simpul_dev and simpul_test)
-.env.example           Every environment variable the app reads, without secrets
-vitest.config.mts      Test runner configuration
-.github/workflows/     CI: format check, lint, typecheck, tests and build on every pull request
+  proxy.ts             Assigns the request ID before routes run
+  instrumentation.ts   Imports lib/env at server start so bad config stops the app
+prisma/                Schema, migrations and seed
+prisma.config.ts       Prisma CLI config (loads .env, picks the database URL)
+http/                  Example requests per resource (`*.http`)
+docker/postgres-init/  SQL run when the local database volume is first created
+docs/decisions/        Architecture decision records (ADRs)
 ```
+
+Unit tests sit next to the code (`*.test.ts`). `docker-compose.yml` runs local Postgres
+(`simpul_dev`, `simpul_test`), `.env.example` lists every variable, and `.github/workflows/` runs CI.
 
 Dependency rule: `modules/stock` may import from `modules/platform`, never the other way
 around. See `docs/decisions/0002-module-boundaries.md`.
@@ -89,6 +98,8 @@ access. Only the last layer talks to Prisma.
 11. Do not add a library without a stated reason. Prefer what is already in the stack.
 12. Language: code, comments, commit messages, issues and docs in English. UI text in Indonesian.
 13. Dates are stored in UTC and shown in WIB. Numbers use Indonesian formatting in the UI.
+14. Every API Route Handler is wrapped in `withApiLog`. A dynamic route must pass its route label
+    (`withApiLog(handler, { route: "/api/invitations/[token]" })`) so a token in the URL never reaches the log.
 
 ## Commands
 
@@ -103,13 +114,8 @@ pnpm test               # run all tests once (Vitest); needs the test database (
 pnpm test:watch         # re-run tests on change while developing
 pnpm format             # Prettier, write
 pnpm format:check       # Prettier, check only
+pnpm prisma migrate dev # create/apply migrations locally (never against Neon)
 pnpm prisma db seed     # demo data; refuses a non-local database (see SEED_ALLOW_REMOTE in .env.example)
-```
-
-Added by later stories (update this list when they land):
-
-```bash
-pnpm prisma migrate dev           # database migrations (E0-04)
 ```
 
 To rebuild the local database from scratch (this deletes local data): `docker compose down -v`,
