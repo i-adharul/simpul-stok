@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import path from "node:path";
 import { defineConfig } from "vitest/config";
 
 // Vitest does not load .env by itself; load it so src/lib/env.ts can parse it.
@@ -7,6 +8,8 @@ if (existsSync(".env")) {
 }
 
 export default defineConfig({
+  // Same "@/" alias as tsconfig, so tests can import route modules.
+  resolve: { alias: { "@": path.resolve(import.meta.dirname, "src") } },
   test: {
     environment: "node",
     // Non-secret stand-in so tests never depend on (or leak) the real secret from .env.

@@ -1,8 +1,7 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { ApiError, ERROR_CODES } from "./api-error";
 import { withApiLog } from "./api-handler";
-import { parseInput } from "./api-input";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -74,19 +73,19 @@ describe("withApiLog", () => {
     });
   });
 
-  it("passes every handler argument through, including the route context", async () => {
+  it("passes the request and the route context through to the handler", async () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
     type Context = { params: Promise<{ id: string }> };
     const context: Context = { params: Promise.resolve({ id: "abc" }) };
-    const handler = vi.fn<(request: Request, context: Context) => Response>(
+    const handler = vi.fn<(request: Request, input: unknown, context: Context) => Response>(
       () => new Response(null),
     );
     const incoming = request("/api/things/abc");
 
     await withApiLog(handler)(incoming, context);
 
-    expect(handler).toHaveBeenCalledWith(incoming, context);
-    expect(handler.mock.calls[0][1]).toBe(context);
+    expect(handler.mock.calls[0][0]).toBe(incoming);
+    expect(handler.mock.calls[0][2]).toBe(context);
   });
 
   it("logs the route label instead of the raw path when one is given", async () => {
@@ -123,7 +122,7 @@ describe("withApiLog", () => {
   });
 });
 
-describe("withApiLog with ApiError and parseInput", () => {
+describe("withApiLog input validation", () => {
   const schemas = {
     body: z.object({ name: z.string().min(1) }),
     query: z.object({ page: z.coerce.number().int().min(1) }),
@@ -134,14 +133,16 @@ describe("withApiLog with ApiError and parseInput", () => {
   const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
   const goodId = "6f1c1f1e-3b0b-4a43-9a6e-0b3f6f1c1f1e";
 
-  it("returns 400 with details for invalid body, query and params together", async () => {
+  beforeEach(() => {
     vi.spyOn(console, "info").mockImplementation(() => {});
-    const handler = withApiLog(async (req: Request, c: ReturnType<typeof ctx>) => {
-      await parseInput(req, c, schemas);
-      return Response.json({ ok: true });
-    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
 
-    const response = await handler(post("/api/x?page=0", '{"name":""}'), ctx("nope"));
+  it("returns 400 with details for invalid body, query and params together, without calling the handler", async () => {
+    const inner = vi.fn(async () => Response.json({ ok: true }));
+    const handler = withApiLog(inner, { ...schemas, route: "/api/x/[id]" });
+
+    const response = await handler(post("/api/x/nope?page=0", '{"name":""}'), ctx("nope"));
 
     expect(response.status).toBe(400);
     const body = await response.json();
@@ -151,33 +152,81 @@ describe("withApiLog with ApiError and parseInput", () => {
       "params",
       "query",
     ]);
+    expect(inner).not.toHaveBeenCalled();
+    expect(response.headers.get("x-request-id")).toBeTruthy();
   });
 
-  it("returns 400 for a body that is not JSON and does not echo it", async () => {
-    vi.spyOn(console, "info").mockImplementation(() => {});
-    const handler = withApiLog(async (req: Request) => {
-      await parseInput(req, undefined, { body: schemas.body });
-      return new Response(null);
-    });
-    const response = await handler(post("/api/x", "not-json-secret"));
+  it("returns 400 for a body that is not JSON, does not echo it and does not call the handler", async () => {
+    const inner = vi.fn(async () => new Response(null));
+    const response = await withApiLog(inner, { body: schemas.body })(
+      post("/api/x", "not-json-secret"),
+    );
     expect(response.status).toBe(400);
     expect(JSON.stringify(await response.json())).not.toContain("not-json-secret");
+    expect(inner).not.toHaveBeenCalled();
   });
 
-  it("passes parsed, coerced values to the handler", async () => {
-    vi.spyOn(console, "info").mockImplementation(() => {});
-    const handler = withApiLog(async (req: Request, c: ReturnType<typeof ctx>) => {
-      const input = await parseInput(req, c, schemas);
-      return Response.json(input);
+  it("never echoes a rejected value", async () => {
+    const response = await withApiLog(async () => new Response(null), { body: schemas.body })(
+      post("/api/x", '{"name":123456789}'),
+    );
+    expect(JSON.stringify(await response.json())).not.toContain("123456789");
+  });
+
+  it("uses a custom message and no details when the rules are sensitive", async () => {
+    const handler = withApiLog(async () => new Response(null), {
+      body: z.object({ password: z.string().min(12) }),
+      invalidMessage: "Password wajib diisi.",
+      hideIssues: true,
     });
-    const response = await handler(post("/api/x?page=2", '{"name":"Gudang"}'), ctx(goodId));
+    const response = await handler(post("/api/x", '{"password":"short"}'));
+    expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
-      body: { name: "Gudang" },
-      query: { page: 2 },
-      params: { id: goodId },
+      code: "VALIDATION_ERROR",
+      message: "Password wajib diisi.",
+      details: null,
     });
   });
 
+  it("passes the parsed, coerced values to the handler as typed input", async () => {
+    const handler = withApiLog(async (_req, input) => {
+      // Compile-time check: these are the schema output types.
+      const name: string = input.body.name;
+      const page: number = input.query.page;
+      const id: string = input.params.id;
+      return Response.json({ name, page, id });
+    }, schemas);
+    const response = await handler(post("/api/x?page=2", '{"name":"Gudang"}'), ctx(goodId));
+    expect(await response.json()).toEqual({ name: "Gudang", page: 2, id: goodId });
+  });
+
+  it("does not read the body when the route declares body: none", async () => {
+    const inner = vi.fn(async () => new Response(null, { status: 204 }));
+    const response = await withApiLog(inner, { body: "none" })(post("/api/x", "ignored"));
+    expect(response.status).toBe(204);
+    expect(inner).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["POST", "PUT", "PATCH", "DELETE"])(
+    "rejects a %s route with no validation decision, without calling the handler",
+    async (method) => {
+      const inner = vi.fn(async () => new Response(null));
+      const response = await withApiLog(inner)(
+        new Request("http://localhost/api/x", { method, body: "{}" }),
+      );
+      expect(response.status).toBe(500);
+      expect(await response.json()).toMatchObject({ code: "INTERNAL_ERROR", details: null });
+      expect(inner).not.toHaveBeenCalled();
+    },
+  );
+
+  it("accepts a GET route with no validation decision", async () => {
+    const response = await withApiLog(async () => new Response(null, { status: 204 }))(request());
+    expect(response.status).toBe(204);
+  });
+});
+
+describe("withApiLog error mapping", () => {
   it("maps a thrown ApiError through the error convention and logs it as info", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
     const error = vi.spyOn(console, "error").mockImplementation(() => {});

@@ -3,7 +3,7 @@ import { env } from "../../lib/env";
 import { withApiLog } from "../../lib/api-handler";
 import type { PrismaClient } from "../../generated/prisma/client";
 import { assertTestDatabaseUrl, createTestPrisma } from "../../test/test-database";
-import { createLoginHandler } from "./login-handler";
+import { createLoginHandler, loginRoute } from "./login-handler";
 import { DEMO_ACCOUNTS, seedBase } from "./seed";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "./session";
 
@@ -12,7 +12,8 @@ const owner = DEMO_ACCOUNTS.find((a) => a.role === "OWNER")!;
 const viewer = DEMO_ACCOUNTS.find((a) => a.role === "VIEWER")!;
 
 let prisma: PrismaClient;
-let handler: ReturnType<typeof createLoginHandler>;
+let inner: ReturnType<typeof createLoginHandler>;
+let handler: ReturnType<typeof withApiLog>;
 
 function post(body: unknown, raw = false): Request {
   return new Request("http://localhost/api/auth/login", {
@@ -26,7 +27,8 @@ beforeAll(async () => {
   prisma = createTestPrisma(assertTestDatabaseUrl(env.TEST_DATABASE_URL));
   await prisma.$executeRaw`TRUNCATE TABLE subscriptions, users, plans, organizations RESTART IDENTITY CASCADE`;
   await seedBase(prisma);
-  handler = createLoginHandler({ prisma, secret });
+  inner = createLoginHandler({ prisma, secret });
+  handler = withApiLog(inner, loginRoute);
 });
 
 beforeEach(async () => {
@@ -139,7 +141,7 @@ describe("POST login: logging", () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
-      const wrapped = withApiLog(handler, { route: "/api/auth/login" });
+      const wrapped = withApiLog(inner, { ...loginRoute, route: "/api/auth/login" });
       const ok = await wrapped(post({ email: owner.email, password: owner.password }));
       await wrapped(post({ email: owner.email, password: "wrong-pass-1" }));
       await wrapped(post({ email: "nobody@example.com", password: "unknown-user-pw-9" }));

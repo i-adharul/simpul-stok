@@ -4,7 +4,8 @@ import { env } from "../../lib/env";
 import type { PrismaClient } from "../../generated/prisma/client";
 import { assertTestDatabaseUrl, createTestPrisma } from "../../test/test-database";
 import { createMeHandler } from "./me-handler";
-import { createChangePasswordHandler } from "./password-change-handler";
+import { withApiLog } from "../../lib/api-handler";
+import { changePasswordRoute, createChangePasswordHandler } from "./password-change-handler";
 import { DEMO_ACCOUNTS, seedBase } from "./seed";
 import { SESSION_COOKIE_NAME, createSessionToken } from "./session";
 
@@ -12,7 +13,7 @@ const secret = env.SESSION_SECRET;
 const owner = DEMO_ACCOUNTS.find((a) => a.role === "OWNER")!;
 const NEW_PASSWORD = "kopi-senja-baru-77";
 let prisma: PrismaClient;
-let change: ReturnType<typeof createChangePasswordHandler>;
+let change: ReturnType<typeof withApiLog>;
 let me: ReturnType<typeof createMeHandler>;
 let ownerId: string;
 let ownerHash: string;
@@ -36,7 +37,7 @@ beforeAll(async () => {
   prisma = createTestPrisma(assertTestDatabaseUrl(env.TEST_DATABASE_URL));
   await prisma.$executeRaw`TRUNCATE TABLE subscriptions, users, plans, organizations RESTART IDENTITY CASCADE`;
   await seedBase(prisma);
-  change = createChangePasswordHandler({ prisma, secret });
+  change = withApiLog(createChangePasswordHandler({ prisma, secret }), changePasswordRoute);
   me = createMeHandler({ prisma, secret });
   const user = await prisma.user.findUniqueOrThrow({ where: { email: owner.email } });
   ownerId = user.id;
