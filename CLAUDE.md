@@ -56,6 +56,7 @@ src/
     format.ts          WIB dates and Indonesian number/Rupiah formats
   modules/
     platform/          Auth, organizations, members, plans, billing, platform admin
+                       (tenant-client.ts: tenant-scoped Prisma client; tenant-route.ts: withTenantRoute)
     stock/             Warehouses, products, stock levels, movements, transfers
   proxy.ts             Assigns the request ID and rejects cross-origin writes (CSRF) before routes run
   instrumentation.ts   Imports lib/env at server start so bad config stops the app
@@ -85,8 +86,10 @@ access. Only the last layer talks to Prisma.
 
 1. `organizationId` comes only from the session. Never read it from a request body, query or URL.
 2. A resource ID that belongs to another organization returns **404**, never 403.
-3. Every query on tenant data goes through the tenant-scoped client. No raw `prisma.<model>` calls
-   in services or route handlers.
+3. Every query on tenant data goes through the tenant-scoped client (`createTenantClient`, handed to
+   handlers by `withTenantRoute` as `db`; services take the `TenantClient` type). No raw `prisma.<model>`
+   calls, no `@/lib/db` or `PrismaClient` import, no `$queryRaw`/`$executeRaw` outside the allowlists in
+   `eslint.config.mjs` (lint fails). The client does not validate foreign key IDs: look them up through it first.
 4. Validate all input with Zod on the server, not only in forms.
 5. Read configuration only through `env` from `src/lib/env.ts`, never `process.env` directly.
    A new variable goes into `env-schema.ts` and `.env.example` in the same change.
