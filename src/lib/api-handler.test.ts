@@ -70,4 +70,52 @@ describe("withApiLog", () => {
       errorMessage: "secret internals at /srv/app.ts:1",
     });
   });
+
+  it("passes every handler argument through, including the route context", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    type Context = { params: Promise<{ id: string }> };
+    const context: Context = { params: Promise.resolve({ id: "abc" }) };
+    const handler = vi.fn<(request: Request, context: Context) => Response>(
+      () => new Response(null),
+    );
+    const incoming = request("/api/things/abc");
+
+    await withApiLog(handler)(incoming, context);
+
+    expect(handler).toHaveBeenCalledWith(incoming, context);
+    expect(handler.mock.calls[0][1]).toBe(context);
+  });
+
+  it("logs the route label instead of the raw path when one is given", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const handler = withApiLog(async () => new Response(null), {
+      route: "/api/invitations/[token]",
+    });
+
+    await handler(request("/api/invitations/s3cr3t-invite-token"));
+
+    const output = String(info.mock.calls[0][0]);
+    expect(JSON.parse(output).path).toBe("/api/invitations/[token]");
+    expect(output).not.toContain("s3cr3t-invite-token");
+  });
+
+  it("keeps logging the pathname when no route label is given", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    await withApiLog(async () => new Response(null))(request("/api/things/abc"));
+    expect(JSON.parse(String(info.mock.calls[0][0])).path).toBe("/api/things/abc");
+  });
+
+  it("sets the request ID on a response whose headers are immutable", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const immutable = Response.redirect("http://localhost/elsewhere", 302);
+    expect(() => immutable.headers.set("x-test", "1")).toThrow();
+
+    const response = await withApiLog(async () => immutable)(
+      request("/api/thing", { "x-request-id": "req-12345678" }),
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("http://localhost/elsewhere");
+    expect(response.headers.get("x-request-id")).toBe("req-12345678");
+  });
 });
