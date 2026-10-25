@@ -23,6 +23,20 @@ describe("validatePassword length", () => {
   });
 });
 
+describe("PASSWORD_FORMAT_MESSAGE", () => {
+  it("says the maximum is in bytes and that accents and emoji count as more than one", () => {
+    expect(PASSWORD_FORMAT_MESSAGE).toContain("72 byte");
+    expect(PASSWORD_FORMAT_MESSAGE).toMatch(/beraksen/);
+    expect(PASSWORD_FORMAT_MESSAGE).toMatch(/emoji/);
+    expect(PASSWORD_FORMAT_MESSAGE).toMatch(/lebih dari 1 byte/);
+  });
+
+  it("is returned for an emoji password that is under 72 characters but over 72 bytes", () => {
+    const pw = "a1" + "😀".repeat(18); // 20 characters (38 UTF-16 units), 74 bytes
+    expect(validatePassword(pw, email)).toEqual({ ok: false, message: PASSWORD_FORMAT_MESSAGE });
+  });
+});
+
 describe("validatePassword character rules", () => {
   it("requires a letter", () => {
     expect(validatePassword("93847561920", email)).toEqual({

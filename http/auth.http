@@ -1,0 +1,65 @@
+### Login as the demo Owner (seed account). Local server: pnpm dev
+# Expect 200 {"user":{...,"role":"OWNER"},"redirectTo":"/dashboard"}
+# Response header: Set-Cookie: __Host-simpul_session=<token>; Max-Age=28800; Path=/; HttpOnly; Secure; SameSite=lax
+# The cookie is Secure: Chrome and Firefox accept it on http://localhost, curl and Safari may not store it.
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{ "email": "owner@demotoko.test", "password": "owner-demo-2026" }
+
+### Login as the platform admin
+# Expect 200 with "redirectTo":"/platform"
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{ "email": "admin@simpul.test", "password": "platform-demo-2026" }
+
+### Email is compared in lowercase (spaces around it are ignored)
+# Expect 200
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{ "email": " OWNER@DemoToko.test ", "password": "owner-demo-2026" }
+
+### Wrong password
+# Expect 401 {"code":"INVALID_CREDENTIALS","message":"Email atau password salah.","details":null}
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{ "email": "owner@demotoko.test", "password": "not-the-password-1" }
+
+### Unknown email
+# Expect the SAME 401 body as above (no account enumeration)
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{ "email": "nobody@demotoko.test", "password": "owner-demo-2026" }
+
+### Inactive user
+# First: UPDATE users SET is_active = false WHERE email = 'viewer@demotoko.test';
+# Expect the SAME 401 body as above. Restore with is_active = true afterwards.
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{ "email": "viewer@demotoko.test", "password": "viewer-demo-2026" }
+
+### Password over 72 bytes
+# Expect the SAME 401 body (never truncated, never explained)
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{ "email": "owner@demotoko.test", "password": "owner-demo-2026xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" }
+
+### Missing password
+# Expect 400 {"code":"VALIDATION_ERROR","message":"Email dan password wajib diisi.","details":null}
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{ "email": "owner@demotoko.test" }
+
+### Body that is not JSON
+# Expect 400 VALIDATION_ERROR
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+not json

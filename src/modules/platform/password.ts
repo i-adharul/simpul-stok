@@ -1,8 +1,11 @@
 // Single password rule set shared by sign-up, invitation, reset and password change
 // (docs/02_Functional_Spec.md, Design decisions: Account). Pure: no HTTP, no database.
 
+// The limit is in bytes because bcrypt reads only the first 72 bytes and the
+// password is not pre-hashed (decision on issue #24).
 export const PASSWORD_FORMAT_MESSAGE =
-  "Password harus minimal 8 karakter dan mengandung huruf serta angka.";
+  "Password harus minimal 8 karakter, maksimal 72 byte, dan mengandung huruf serta angka. " +
+  "Huruf beraksen dan emoji dihitung lebih dari 1 byte.";
 export const PASSWORD_TOO_COMMON_MESSAGE = "Password terlalu umum.";
 
 const MIN_LENGTH = 8;

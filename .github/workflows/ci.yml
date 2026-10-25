@@ -35,6 +35,8 @@ jobs:
     env:
       DATABASE_URL: postgresql://simpul:simpul@localhost:5432/simpul_test
       TEST_DATABASE_URL: postgresql://simpul:simpul@localhost:5432/simpul_test
+      # Non-secret stand-in: `next build` loads the route modules, which parse the environment.
+      SESSION_SECRET: ci-only-session-secret-0123456789abcdef
 
     steps:
       - name: Check out repository

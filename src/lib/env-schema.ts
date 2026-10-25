@@ -4,9 +4,25 @@ const postgresUrl = z.string().refine((value) => /^postgres(ql)?:\/\//.test(valu
   message: "must be a PostgreSQL connection string (postgresql://...)",
 });
 
+// The placeholder in .env.example. It is long enough to pass the length rule on purpose, and rejected
+// by name, so `cp .env.example .env` cannot start an app that signs sessions with a public value.
+export const SESSION_SECRET_EXAMPLE = "CHANGE-ME-example-value-not-a-real-secret";
+
+// No custom message below may include the value: an invalid secret must not reach a log.
+const sessionSecret = z
+  .string()
+  .min(32, {
+    message: "must be at least 32 characters (generate one with `openssl rand -base64 48`)",
+  })
+  .refine((value) => value !== SESSION_SECRET_EXAMPLE, {
+    message: "must not be the placeholder from .env.example",
+  });
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   DATABASE_URL: postgresUrl,
+  // Signs the session cookie (HS256). Rotating it logs everyone out.
+  SESSION_SECRET: sessionSecret,
   // Only needed when running automated tests.
   TEST_DATABASE_URL: postgresUrl.optional(),
   // Only read by the seed (assertSeedTarget): lets it write demo accounts to a non-local database.

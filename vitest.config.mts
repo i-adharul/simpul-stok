@@ -9,6 +9,8 @@ if (existsSync(".env")) {
 export default defineConfig({
   test: {
     environment: "node",
+    // Non-secret stand-in so tests never depend on (or leak) the real secret from .env.
+    env: { SESSION_SECRET: "test-only-session-secret-0123456789abcdef" },
     include: ["src/**/*.test.ts"],
     globalSetup: ["./src/test/global-setup.ts"],
     // Database tests truncate shared tables, so test files must not run at the same time.

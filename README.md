@@ -49,12 +49,27 @@ Requirements: Node.js (see `.nvmrc`), pnpm, Docker.
 
 ```bash
 pnpm install
-cp .env.example .env
+cp .env.example .env    # then set SESSION_SECRET (see below): the placeholder is rejected on purpose
 docker compose up -d    # Postgres on host port 5433 (5432 is often taken by a local install)
 pnpm prisma migrate dev
 pnpm prisma db seed
 pnpm dev
 ```
+
+## Session secret
+
+`SESSION_SECRET` signs the login cookie (at least 32 characters). The app refuses to start with a shorter
+value or with the placeholder from `.env.example`. Generate one per environment:
+
+```bash
+openssl rand -base64 48
+```
+
+- **Local:** put the value in `.env` (never commit it).
+- **Vercel:** Project Settings, Environment Variables, add `SESSION_SECRET` for **Production** and **Preview**
+  (a different value for each). A build or deploy without it fails at startup.
+- **CI and tests** use a fixed non-secret stand-in (`.github/workflows/ci.yml`, `vitest.config.mts`).
+- Changing the value signs everyone out. See [ADR 0009](docs/decisions/0009-stateless-signed-session.md).
 
 ## Production migrations
 
@@ -98,6 +113,9 @@ Product and technical documents are in [`docs/`](docs/).
 
 - Payments are sandbox only.
 - No login rate limiting yet (deferred to later development).
+- A single session cannot be revoked: sessions are signed cookies without a database table, and logging out only
+  deletes the cookie. A user is cut off by deactivation or a password change, and every session ends after 8 hours
+  ([ADR 0009](docs/decisions/0009-stateless-signed-session.md)).
 - Request logs (status, duration) cover API routes only; pages get a request ID but no log line.
 - The free Neon database sleeps after 5 minutes without queries, so the first request after a pause is slower.
 - No email delivery; invitations and password resets use links that are copied manually.
