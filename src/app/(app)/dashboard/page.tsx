@@ -1,11 +1,11 @@
-import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/states/empty-state";
+import { ReceiveStockButton } from "../stock/stock-receive-dialog";
 
 export default function DashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-      <EmptyState message="Belum ada data stok." action={<Button>Terima barang</Button>} />
+      <EmptyState message="Belum ada data stok." action={<ReceiveStockButton />} />
     </div>
   );
 }
