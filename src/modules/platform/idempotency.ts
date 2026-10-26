@@ -18,7 +18,7 @@ export type TenantTransaction = Omit<TenantClient, "$transaction">;
 // A request that waits for a row lock or for the unique index of a concurrent twin (see runIdempotent)
 // can wait longer than that under load, and a timeout would roll back a request that was fine. 10 s
 // matches the pool's connection timeout (lib/db.ts).
-const TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 10_000 } as const;
+export const TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 10_000 } as const;
 
 const keySchema = z.uuid();
 

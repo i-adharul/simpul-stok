@@ -1,9 +1,11 @@
 import { ApiError, ERROR_CODES } from "../../lib/api-error";
 import { conflictOnUnique } from "../../lib/unique-violation";
 import { authorize } from "../platform/can";
+import { TRANSACTION_OPTIONS, type TenantTransaction } from "../platform/idempotency";
 import { findOwnedOrThrow } from "../platform/ownership";
 import type { RequestContext } from "../platform/request-context";
 import type { TenantClient } from "../platform/tenant-client";
+import { lockWarehouse } from "./warehouse-lock";
 import type {
   CreateWarehouseBody,
   ListWarehousesQuery,
@@ -86,13 +88,27 @@ export function createWarehouse(db: TenantClient, ctx: RequestContext, body: Cre
 export async function updateWarehouse(db: TenantClient, id: string, body: UpdateWarehouseBody) {
   const { archived, ...fields } = body;
   await findOwnedOrThrow(db, "warehouse", id, { includeArchived: archived === false });
-  if (archived === true) await assertNoStock(db, id);
   const data =
     archived === undefined ? fields : { ...fields, archivedAt: archived ? new Date() : null };
-  return conflictOnUnique(() => db.warehouse.update({ where: { id }, data }), DUPLICATE_CODE);
+  if (archived !== true) {
+    return conflictOnUnique(() => db.warehouse.update({ where: { id }, data }), DUPLICATE_CODE);
+  }
+  // Lock first, then check the stock, then write archivedAt, all in one transaction. A receipt that
+  // holds the lock finishes first and the check sees its stock (409); one that waits finds the
+  // warehouse archived and is refused (ADR 0013). Without the lock a receipt could commit between
+  // the check and the write, leaving an archived warehouse with stock (BL08).
+  return conflictOnUnique(
+    () =>
+      db.$transaction(async (tx) => {
+        await lockWarehouse(tx, id);
+        await assertNoStock(tx, id);
+        return tx.warehouse.update({ where: { id }, data });
+      }, TRANSACTION_OPTIONS),
+    DUPLICATE_CODE,
+  );
 }
 
-async function assertNoStock(db: TenantClient, warehouseId: string) {
+async function assertNoStock(db: TenantTransaction, warehouseId: string) {
   const withStock = await db.stockLevel.count({ where: { warehouseId, quantity: { gt: 0 } } });
   if (withStock > 0) throw new ApiError(409, ERROR_CODES.CONFLICT, HAS_STOCK);
 }
