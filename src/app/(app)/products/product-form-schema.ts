@@ -3,14 +3,17 @@ import { ApiError } from "@/lib/api-client";
 
 // Client-side check for quick messages only; the server validates again (rule 4). The limits and units
 // match src/modules/stock/product-schema.ts (not imported: that file is server-side code).
-export const PRODUCT_UNITS = [
-  { value: "bks", label: "bks (bungkus)" },
-  { value: "ktk", label: "ktk (kotak)" },
-  { value: "pcs", label: "pcs (buah)" },
-  { value: "btl", label: "btl (botol)" },
-  { value: "jrg", label: "jrg (jeriken)" },
-  { value: "pak", label: "pak (paket)" },
-] as const;
+const UNIT_LABELS = {
+  bks: "bks (bungkus)",
+  ktk: "ktk (kotak)",
+  pcs: "pcs (buah)",
+  btl: "btl (botol)",
+  jrg: "jrg (jeriken)",
+  pak: "pak (paket)",
+} as const;
+type Unit = keyof typeof UNIT_LABELS;
+const UNIT_VALUES = Object.keys(UNIT_LABELS) as [Unit, ...Unit[]];
+export const PRODUCT_UNITS = UNIT_VALUES.map((value) => ({ value, label: UNIT_LABELS[value] }));
 
 export const productFormSchema = z.object({
   // Same normalisation as BL09: no whitespace, uppercase.
@@ -20,7 +23,7 @@ export const productFormSchema = z.object({
     .transform((value) => value.replace(/\s+/g, "").toUpperCase())
     .pipe(z.string().min(1, "SKU wajib diisi.").max(50, "SKU maksimal 50 karakter.")),
   name: z.string().trim().min(1, "Nama wajib diisi.").max(100, "Nama maksimal 100 karakter."),
-  unit: z.enum(["bks", "ktk", "pcs", "btl", "jrg", "pak"], {
+  unit: z.enum(UNIT_VALUES, {
     message: "Pilih satuan.",
   }),
   // The input is text; an empty or non-numeric value is rejected instead of silently becoming 0.

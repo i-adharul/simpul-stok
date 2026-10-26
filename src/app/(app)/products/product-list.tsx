@@ -18,9 +18,8 @@ import { LoadingSkeleton } from "@/components/states/loading-skeleton";
 import { Pagination } from "@/components/pagination";
 import { fetchMe, ME_QUERY_KEY } from "@/components/app-shell/shell-user";
 import { formatNumber } from "@/lib/format";
-import { pageCount } from "@/lib/pagination";
 import { ProductFormDialog } from "./product-form-dialog";
-import { fetchProducts, PAGE_SIZE, PRODUCTS_QUERY_KEY, type Product } from "./product-api";
+import { fetchProductsPage, PAGE_SIZE, PRODUCTS_QUERY_KEY, type Product } from "./product-api";
 
 // P02 target: undefined = closed, null = create, a product = edit.
 type FormTarget = Product | null | undefined;
@@ -33,14 +32,10 @@ export function ProductList() {
   const me = useQuery({ queryKey: ME_QUERY_KEY, queryFn: fetchMe, retry: false });
   const list = useQuery({
     queryKey: [...PRODUCTS_QUERY_KEY, requestedPage],
-    queryFn: () => fetchProducts(requestedPage),
+    queryFn: () => fetchProductsPage(requestedPage),
     placeholderData: keepPreviousData,
     retry: false,
   });
-  // Clamp while rendering from the response itself (no setState): if the last page emptied, show the last one.
-  const page = list.data
-    ? Math.min(requestedPage, pageCount(list.data.total, PAGE_SIZE))
-    : requestedPage;
   const canManage = me.data?.user.role === "OWNER";
 
   const addButton = canManage && (
@@ -109,7 +104,7 @@ export function ProductList() {
             </Table>
           </div>
           <Pagination
-            page={page}
+            page={list.data.page}
             pageSize={PAGE_SIZE}
             total={list.data.total}
             noun="produk"

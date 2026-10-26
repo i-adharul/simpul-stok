@@ -18,3 +18,8 @@ export function pageWindow(current: number, last: number): (number | null)[] {
   });
   return result;
 }
+
+/** Keeps a requested page inside 1..last (an archive or delete can empty the last page). */
+export function clampPage(requested: number, total: number, pageSize: number): number {
+  return Math.min(Math.max(1, requested), pageCount(total, pageSize));
+}
