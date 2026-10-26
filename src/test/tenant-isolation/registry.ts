@@ -251,7 +251,26 @@ const createMovementRow = async (t: TwoTenants, owner: TenantKey) =>
     })
   ).id;
 
+// History rows are immutable (rule 8), so the snapshot is every column.
+const readMovementRow = async (prisma: PrismaClient, id: string): Promise<RowSnapshot | null> => {
+  const row = await prisma.stockMovement.findUnique({ where: { id } });
+  return row && { ...row };
+};
+
 export const TENANT_ENDPOINTS: TenantEndpoint[] = [
+  {
+    kind: "item",
+    name: "GET /api/stock/movements/[id]",
+    route: "stock/movements/[id]",
+    method: "GET",
+    module: () => import("@/app/api/stock/movements/[id]/route"),
+    action: "history.read",
+    allowedRoles: rolesFor("history.read"),
+    idParam: "id",
+    path: (id: string) => `/api/stock/movements/${id}`,
+    createRow: createMovementRow,
+    readRow: readMovementRow,
+  },
   {
     kind: "list",
     name: "GET /api/stock/movements",

@@ -93,3 +93,8 @@ GET http://localhost:3000/api/stock/movements?type=RECEIVE&productId={{productId
 ### Movement history, next page
 # Paste the nextCursor of the previous answer. A malformed cursor gives 400 VALIDATION_ERROR.
 GET http://localhost:3000/api/stock/movements?cursor=PASTE_NEXT_CURSOR
+
+### Movement detail (P13)
+# Expect 200 with warehouse, product, createdBy (id, name, role), transfer (or null). 404 for an unknown
+# id, another organization's id, or a warehouse the user is not assigned to.
+GET http://localhost:3000/api/stock/movements/{{movementId}}

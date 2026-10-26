@@ -9,6 +9,7 @@ import {
   type TwoTenants,
 } from "../../test/tenant-isolation/fixtures";
 import * as route from "../../app/api/stock/movements/route";
+import * as itemRoute from "../../app/api/stock/movements/[id]/route";
 import { decodeMovementCursor, encodeMovementCursor } from "./stock-schema";
 
 // BL16: filters, keyset pagination, warehouse scope.
@@ -130,6 +131,96 @@ describe("GET /api/stock/movements", () => {
 
 // BL16 "stays fast with 10,000+ rows": the numbers go in the PR. No time limit is asserted (a shared
 // CI machine makes one flaky); the plan check proves the composite index is what serves the page.
+describe("GET /api/stock/movements/[id]", () => {
+  async function getOne(role: "OWNER" | "WAREHOUSE_ADMIN" | "VIEWER", id: string) {
+    const reply = await callRoute(itemRoute.GET, {
+      method: "GET",
+      path: `/api/stock/movements/${id}`,
+      cookie: await cookieFor(t.a.users[role]),
+      params: { id },
+    });
+    return { status: reply.status, json: await reply.json() };
+  }
+
+  it("returns the row with its names, creator and transfer", async () => {
+    const destination = await prisma.warehouse.create({
+      data: { organizationId: t.a.organizationId, code: "DST", name: "Tujuan" },
+    });
+    const transfer = await prisma.stockTransfer.create({
+      data: {
+        organizationId: t.a.organizationId,
+        code: "MT-0001",
+        fromWarehouseId: t.a.warehouseId,
+        toWarehouseId: destination.id,
+        createdById: t.a.users.OWNER,
+      },
+    });
+    const row = await prisma.stockMovement.create({
+      data: {
+        organizationId: t.a.organizationId,
+        warehouseId: t.a.warehouseId,
+        productId: t.a.productId,
+        quantityDelta: -3,
+        type: "TRANSFER_OUT",
+        transferId: transfer.id,
+        note: "catatan",
+        createdById: t.a.users.OWNER,
+      },
+    });
+    const { status, json } = await getOne("VIEWER", row.id);
+    expect(status).toBe(200);
+    expect(json).toMatchObject({
+      id: row.id,
+      quantityDelta: -3,
+      type: "TRANSFER_OUT",
+      note: "catatan",
+      warehouse: { id: t.a.warehouseId },
+      product: { id: t.a.productId },
+      createdBy: { id: t.a.users.OWNER, role: "OWNER" },
+      transfer: {
+        id: transfer.id,
+        code: "MT-0001",
+        toWarehouse: { id: destination.id, name: "Tujuan" },
+      },
+    });
+    expect(json.createdBy).not.toHaveProperty("email");
+  });
+
+  it("answers 404 for another organization, an unknown id and a malformed id", async () => {
+    const other = await prisma.stockMovement.create({
+      data: {
+        organizationId: t.b.organizationId,
+        warehouseId: t.b.warehouseId,
+        productId: t.b.productId,
+        quantityDelta: 1,
+        type: "RECEIVE",
+        createdById: t.b.users.OWNER,
+      },
+    });
+    for (const id of [other.id, "00000000-0000-7000-8000-00000000ffff", "nope"]) {
+      expect((await getOne("OWNER", id)).status).toBe(404);
+    }
+  });
+
+  it("answers 404 for a warehouse the user is not assigned to", async () => {
+    const hidden = await prisma.warehouse.create({
+      data: { organizationId: t.a.organizationId, code: "HID", name: "Hidden" },
+    });
+    const row = await prisma.stockMovement.create({
+      data: {
+        organizationId: t.a.organizationId,
+        warehouseId: hidden.id,
+        productId: t.a.productId,
+        quantityDelta: 1,
+        type: "RECEIVE",
+        createdById: t.a.users.OWNER,
+      },
+    });
+    expect((await getOne("VIEWER", row.id)).status).toBe(404);
+    expect((await getOne("OWNER", row.id)).status).toBe(200);
+  });
+});
+
 describe("history with 10,000 rows", () => {
   it("serves a page from the (organization, createdAt, id) index and reports timings", async () => {
     await prisma.$executeRaw`

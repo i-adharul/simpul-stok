@@ -102,3 +102,6 @@ export const listMovementsQuery = z.object({
     .optional(),
 });
 export type ListMovementsQuery = z.output<typeof listMovementsQuery>;
+
+// An id that is not a UUID is answered with 404 by the service, so the schema only requires a string.
+export const movementIdParams = z.object({ id: z.string() });
