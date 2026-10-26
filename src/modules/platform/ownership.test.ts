@@ -11,6 +11,7 @@ let tenant: TenantClient;
 let aWarehouse: string;
 let aArchivedWarehouse: string;
 let aProduct: string;
+let aArchivedProduct: string;
 let bWarehouse: string;
 let bProduct: string;
 let bTransfer: string;
@@ -48,7 +49,10 @@ async function seedOrg(slug: string) {
       createdById: user.id,
     },
   });
-  return { org, user, w1, archived, product, transfer };
+  const archivedProduct = await prisma.product.create({
+    data: { organizationId: org.id, sku: "S2", name: "P2", unit: "pcs", archivedAt: new Date() },
+  });
+  return { org, user, w1, archived, product, archivedProduct, transfer };
 }
 
 beforeAll(() => {
@@ -66,6 +70,7 @@ beforeEach(async () => {
   aWarehouse = a.w1.id;
   aArchivedWarehouse = a.archived.id;
   aProduct = a.product.id;
+  aArchivedProduct = a.archivedProduct.id;
   aTransfer = a.transfer.id;
   bWarehouse = b.w1.id;
   bProduct = b.product.id;
@@ -125,6 +130,27 @@ describe("findOwnedOrThrow", () => {
     expect(await bodyOf(malformed)).toBe(await bodyOf(missing));
   });
 
+  it("throws 404 for a product and a stock transfer that do not exist", async () => {
+    const missing = "019a0000-0000-7000-8000-000000000000";
+    for (const model of ["product", "stockTransfer"] as const) {
+      const error = await failure(findOwnedOrThrow(tenant, model, missing));
+      expect(error.status).toBe(404);
+      expect(error.code).toBe("NOT_FOUND");
+    }
+  });
+
+  it("hides an archived product unless the caller includes it", async () => {
+    expect((await failure(findOwnedOrThrow(tenant, "product", aArchivedProduct))).status).toBe(404);
+    const row = await findOwnedOrThrow(tenant, "product", aArchivedProduct, {
+      includeArchived: true,
+    });
+    expect(row.id).toBe(aArchivedProduct);
+  });
+
+  it("does not hide a stock transfer (it has no archivedAt), even without includeArchived", async () => {
+    expect((await findOwnedOrThrow(tenant, "stockTransfer", aTransfer)).id).toBe(aTransfer);
+  });
+
   it("hides archived rows unless the caller includes them", async () => {
     const error = await failure(findOwnedOrThrow(tenant, "warehouse", aArchivedWarehouse));
     expect(error.status).toBe(404);
@@ -154,6 +180,19 @@ describe("assertOwnedIds", () => {
     expect(await bodyOf(foreign)).toBe(await bodyOf(lookup));
     const malformed = await failure(assertOwnedIds(tenant, "warehouse", ["x"]));
     expect(await bodyOf(malformed)).toBe(await bodyOf(lookup));
+  });
+
+  it("checks stock transfers: own passes, another organization's gives the same 404", async () => {
+    await assertOwnedIds(tenant, "stockTransfer", [aTransfer]);
+    const foreign = await failure(assertOwnedIds(tenant, "stockTransfer", [aTransfer, bTransfer]));
+    const lookup = await failure(findOwnedOrThrow(tenant, "stockTransfer", bTransfer));
+    expect(foreign.status).toBe(404);
+    expect(await bodyOf(foreign)).toBe(await bodyOf(lookup));
+  });
+
+  it("rejects an archived product unless the caller includes it", async () => {
+    expect((await failure(assertOwnedIds(tenant, "product", [aArchivedProduct]))).status).toBe(404);
+    await assertOwnedIds(tenant, "product", [aArchivedProduct], { includeArchived: true });
   });
 
   it("rejects archived rows unless the caller includes them", async () => {

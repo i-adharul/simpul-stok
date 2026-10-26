@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ApiError,
   ERROR_CODES,
   conflict,
   errorResponse,
@@ -7,6 +8,7 @@ import {
   insufficientStock,
   internalError,
   notFound,
+  notFoundError,
   planLimitReached,
   subscriptionReadOnly,
   unauthenticated,
@@ -84,5 +86,18 @@ describe("error mapping (BL29)", () => {
   it("errorResponse keeps the { code, message, details } shape", async () => {
     const result = await read(errorResponse(418, "X", "y"));
     expect(Object.keys(result.body).sort()).toEqual(["code", "details", "message"]);
+  });
+});
+
+describe("notFoundError (rule 2: one 404 for missing and foreign rows)", () => {
+  it("is an ApiError 404 NOT_FOUND", () => {
+    const error = notFoundError();
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(404);
+    expect(error.code).toBe("NOT_FOUND");
+  });
+
+  it("builds the same body as notFound()", async () => {
+    expect(await notFoundError().toResponse().text()).toBe(await notFound().text());
   });
 });

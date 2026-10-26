@@ -1,5 +1,5 @@
 import type { Product, StockTransfer, Warehouse } from "../../generated/prisma/client";
-import { ApiError, ERROR_CODES } from "../../lib/api-error";
+import { notFoundError } from "../../lib/api-error";
 import type { TenantClient } from "./tenant-client";
 
 // Ownership helpers (CLAUDE.md rule 2, BL03, ADR 0011). They take the TenantClient only, so a row
@@ -19,11 +19,6 @@ type Delegate = {
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-// Built per call: same message as the 404 the tenant client throws for P2025.
-export function notFoundError(): ApiError {
-  return new ApiError(404, ERROR_CODES.NOT_FOUND, "Data tidak ditemukan.");
-}
 
 function whereFor(model: OwnedModel, ids: string[], options: OwnershipOptions) {
   const where: Record<string, unknown> = { id: ids.length === 1 ? ids[0] : { in: ids } };
