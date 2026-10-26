@@ -3,7 +3,7 @@ import { ApiError, ERROR_CODES, internalError } from "./api-error";
 import { errorFields, log } from "./logger";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./request-id";
 
-const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+export const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 type Schema = z.ZodType;
 
