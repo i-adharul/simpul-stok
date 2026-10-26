@@ -56,8 +56,12 @@ src/
     format.ts          WIB dates and Indonesian number/Rupiah formats
   modules/
     platform/          Auth, organizations, members, plans, billing, platform admin
-                       (tenant-client.ts: tenant-scoped Prisma client; tenant-route.ts: withTenantRoute)
+                       (tenant-client.ts: tenant-scoped Prisma client; tenant-route.ts: withTenantRoute;
+                       request-context.ts: context from the session; can.ts: role matrix;
+                       ownership.ts: foreign IDs of other organizations return 404;
+                       subscription-access.ts: temporary write hook, always ACTIVE)
     stock/             Warehouses, products, stock levels, movements, transfers
+  test/                Test helpers and the tenant-isolation harness
   proxy.ts             Assigns the request ID and rejects cross-origin writes (CSRF) before routes run
   instrumentation.ts   Imports lib/env at server start so bad config stops the app
 prisma/                Schema, migrations and seed
