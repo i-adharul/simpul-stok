@@ -75,6 +75,12 @@ Any logged-in user, in every subscription state (BL23). Body: `{ "currentPasswor
 | 401    | `UNAUTHENTICATED`, as for `GET /api/me`                                                                                                                            |
 | 403    | `CSRF_REJECTED`                                                                                                                                                    |
 
+## Warehouse detail (S06)
+
+### `GET /api/warehouses/:id`
+
+Every tenant role that may read the warehouse (`warehouse.read`; Warehouse Admin and Viewer only when assigned, else `403`). The `200` body is the warehouse (`id`, `code`, `name`, `address`, `archivedAt`, ...) plus `"assignedUsers": [{ "id", "name", "role" }]`: the active users assigned to it, sorted by name, without emails (the list is empty when nobody is assigned). `404` when the warehouse is missing or belongs to another organization; an archived warehouse is visible to the Owner only.
+
 ## Warehouse assignment (BL10)
 
 ### `GET /api/warehouses/:id/members`

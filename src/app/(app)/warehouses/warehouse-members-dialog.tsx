@@ -11,6 +11,7 @@ import {
   fetchWarehouseMembers,
   saveWarehouseMembers,
   warehouseMembersKey,
+  WAREHOUSES_QUERY_KEY,
   type MemberCandidate,
   type Warehouse,
 } from "./warehouse-api";
@@ -63,6 +64,8 @@ function MembersDialogBody({
     mutationFn: () => saveWarehouseMembers(warehouse.id, [...selected]),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: key });
+      // The S06 assigned-users list lives under the warehouses key.
+      await queryClient.invalidateQueries({ queryKey: WAREHOUSES_QUERY_KEY });
       onClose();
     },
   });

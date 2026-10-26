@@ -12,6 +12,19 @@ export type Warehouse = {
 export type WarehousePage = { items: Warehouse[]; total: number; page: number; pageSize: number };
 
 export const WAREHOUSES_QUERY_KEY = ["warehouses"] as const;
+
+// S06. Under the list key, so every write that invalidates the list refreshes the detail too.
+export type AssignedUser = { id: string; name: string; role: "WAREHOUSE_ADMIN" | "VIEWER" };
+export type WarehouseDetail = Warehouse & { assignedUsers: AssignedUser[] };
+export const ROLE_LABEL: Record<AssignedUser["role"], string> = {
+  WAREHOUSE_ADMIN: "Admin Gudang",
+  VIEWER: "Viewer",
+};
+export const warehouseKey = (id: string) => [...WAREHOUSES_QUERY_KEY, "detail", id] as const;
+
+export function fetchWarehouse(id: string): Promise<WarehouseDetail> {
+  return apiFetch<WarehouseDetail>(`/api/warehouses/${id}`);
+}
 export const PAGE_SIZE = 20;
 
 export function fetchWarehouses(page: number, includeArchived = false): Promise<WarehousePage> {

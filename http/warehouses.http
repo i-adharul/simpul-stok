@@ -30,7 +30,8 @@ Content-Type: application/json
 { "code": "", "name": "" }
 
 ### Get one warehouse (replace the id)
-# Expect 200; 403 if a Viewer is not assigned to it; 404 for another organization's id
+# Expect 200 { id, code, name, address, archivedAt, assignedUsers: [{ id, name, role }] } (no emails)
+# 403 if a Viewer is not assigned to it; 404 for another organization's id
 GET http://localhost:3000/api/warehouses/00000000-0000-0000-0000-000000000000
 
 ### Edit a warehouse (Owner only; replace the id)
