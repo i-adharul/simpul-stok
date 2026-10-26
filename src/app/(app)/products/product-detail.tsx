@@ -11,6 +11,7 @@ import { LoadingSkeleton } from "@/components/states/loading-skeleton";
 import { fetchMe, ME_QUERY_KEY } from "@/components/app-shell/shell-user";
 import { ApiError } from "@/lib/api-client";
 import { formatDateWib, formatNumber } from "@/lib/format";
+import { AdjustStockButton } from "../stock/stock-adjust-dialog";
 import { ReceiveStockButton } from "../stock/stock-receive-dialog";
 import { ProductArchiveDialog } from "./product-archive-dialog";
 import { ProductFormDialog } from "./product-form-dialog";
@@ -69,6 +70,7 @@ function Body({ product, canManage }: { product: Product; canManage: boolean }) 
         </div>
         <div className="flex flex-wrap gap-2">
           {!archived && <ReceiveStockButton productId={product.id} />}
+          <AdjustStockButton productId={product.id} />
           {canManage && (
             <>
               {!archived && (

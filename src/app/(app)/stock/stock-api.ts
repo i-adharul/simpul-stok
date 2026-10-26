@@ -1,6 +1,7 @@
 import { apiFetch } from "@/lib/api-client";
 import type { Product } from "../products/product-api";
 import type { Warehouse } from "../warehouses/warehouse-api";
+import type { StockAdjustValues } from "./stock-adjust-schema";
 import type { StockReceiveValues } from "./stock-receive-schema";
 
 // Every stock query lives under this key; a stock write invalidates it so S04, S06, S08 and S09 reload.
@@ -55,3 +56,18 @@ export async function fetchReceiveOptions(): Promise<{
 export function canReceiveStock(role: string | undefined): boolean {
   return role === "OWNER" || role === "WAREHOUSE_ADMIN";
 }
+
+// POST /api/stock/adjust answers with the movement (quantity = the signed difference), never the stock.
+export type AdjustResult = ReceiveResult & { reason: string };
+
+// Same key rule as receiveStock: one key per opened form, reused on a retry (ADR 0012).
+export function adjustStock(idempotencyKey: string, values: StockAdjustValues) {
+  return apiFetch<AdjustResult>("/api/stock/adjust", {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(values),
+  });
+}
+
+// BL12: same roles as a receipt (the Viewer only reads).
+export const canAdjustStock = canReceiveStock;

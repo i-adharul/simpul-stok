@@ -10,6 +10,7 @@ import { ErrorBanner } from "@/components/states/error-banner";
 import { LoadingSkeleton } from "@/components/states/loading-skeleton";
 import { fetchMe, ME_QUERY_KEY } from "@/components/app-shell/shell-user";
 import { ApiError } from "@/lib/api-client";
+import { AdjustStockButton } from "../stock/stock-adjust-dialog";
 import { ReceiveStockButton } from "../stock/stock-receive-dialog";
 import { WarehouseArchiveDialog } from "./warehouse-archive-dialog";
 import { WarehouseFormDialog } from "./warehouse-form-dialog";
@@ -71,6 +72,7 @@ function Body({ warehouse, canManage }: { warehouse: Detail; canManage: boolean 
         </div>
         <div className="flex flex-wrap gap-2">
           {!archived && <ReceiveStockButton warehouseId={warehouse.id} />}
+          {!archived && <AdjustStockButton warehouseId={warehouse.id} />}
           {canManage && (
             <>
               {!archived && (
