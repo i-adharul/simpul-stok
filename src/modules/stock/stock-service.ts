@@ -4,7 +4,12 @@ import { runIdempotent, type TenantTransaction } from "../platform/idempotency";
 import { findOwnedOrThrow } from "../platform/ownership";
 import type { RequestContext } from "../platform/request-context";
 import type { TenantClient } from "../platform/tenant-client";
-import type { ReceiveBody } from "./stock-schema";
+import {
+  encodeMovementCursor,
+  MOVEMENTS_PAGE_SIZE,
+  type ListMovementsQuery,
+  type ReceiveBody,
+} from "./stock-schema";
 import { lockWarehouse } from "./warehouse-lock";
 
 const RECEIVE_ENDPOINT = "POST /api/stock/receive";
@@ -113,3 +118,57 @@ function isOutOfRange(error: unknown): boolean {
   const meta = error.meta as { driverAdapterError?: { cause?: { originalCode?: string } } };
   return meta?.driverAdapterError?.cause?.originalCode === "22003";
 }
+
+// BL16 history. Only warehouses the caller may access (ctx.warehouseIds, as for stock levels); a
+// warehouseId filter outside that set simply matches nothing, so it never reveals whether the id exists.
+// Keyset on (createdAt DESC, id DESC) matches the index (organization_id, created_at DESC, id DESC).
+export async function listMovements(db: TenantClient, ctx: RequestContext, q: ListMovementsQuery) {
+  const warehouseIds = q.warehouseId
+    ? ctx.warehouseIds.filter((id) => id === q.warehouseId)
+    : ctx.warehouseIds;
+  const where: Prisma.StockMovementWhereInput = {
+    warehouseId: { in: warehouseIds },
+    ...(q.productId && { productId: q.productId }),
+    ...(q.type && { type: q.type }),
+    ...(q.createdById && { createdById: q.createdById }),
+    ...((q.from || q.to) && {
+      createdAt: { ...(q.from && { gte: q.from }), ...(q.to && { lt: q.to }) },
+    }),
+  };
+  // Row-value comparison written as OR so Prisma can express it; Postgres still walks the index.
+  const after = q.cursor
+    ? {
+        OR: [
+          { createdAt: { lt: q.cursor.createdAt } },
+          { createdAt: q.cursor.createdAt, id: { lt: q.cursor.id } },
+        ],
+      }
+    : {};
+  const rows = await db.stockMovement.findMany({
+    where: { AND: [where, after] },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: MOVEMENTS_PAGE_SIZE + 1,
+  });
+  const page = rows.slice(0, MOVEMENTS_PAGE_SIZE);
+  const last = page[page.length - 1];
+  return {
+    items: page.map(movementListItem),
+    nextCursor:
+      rows.length > MOVEMENTS_PAGE_SIZE && last
+        ? encodeMovementCursor({ createdAt: last.createdAt, id: last.id })
+        : null,
+  };
+}
+
+const movementListItem = (row: Movement) => ({
+  id: row.id,
+  warehouseId: row.warehouseId,
+  productId: row.productId,
+  type: row.type,
+  quantityDelta: row.quantityDelta,
+  reason: row.reason,
+  note: row.note,
+  transferId: row.transferId,
+  createdById: row.createdById,
+  createdAt: row.createdAt.toISOString(),
+});

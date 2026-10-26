@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "../../generated/prisma/client";
 import { can, type Action } from "../../modules/platform/can";
+import { encodeMovementCursor } from "../../modules/stock/stock-schema";
 import { TENANT_ROLES, type TenantKey, type TenantRole, type TwoTenants } from "./fixtures";
 
 // The registry of tenant endpoints (BL03). Every route under src/app/api that uses withTenantRoute is
@@ -235,7 +236,36 @@ const readStockPairs = async (prisma: PrismaClient, t: TwoTenants) => {
   return { a: await quantityOf(t.a), b: await quantityOf(t.b) };
 };
 
+// A history row in the organization's own warehouse (assigned to every role) and product.
+const createMovementRow = async (t: TwoTenants, owner: TenantKey) =>
+  (
+    await t.prisma.stockMovement.create({
+      data: {
+        organizationId: t[owner].organizationId,
+        warehouseId: t[owner].warehouseId,
+        productId: t[owner].productId,
+        quantityDelta: 1,
+        type: "RECEIVE",
+        createdById: t[owner].users.OWNER,
+      },
+    })
+  ).id;
+
 export const TENANT_ENDPOINTS: TenantEndpoint[] = [
+  {
+    kind: "list",
+    name: "GET /api/stock/movements",
+    route: "stock/movements",
+    method: "GET",
+    module: () => import("@/app/api/stock/movements/route"),
+    action: "history.read",
+    allowedRoles: rolesFor("history.read"),
+    path: "/api/stock/movements",
+    createRow: createMovementRow,
+    idsOf: (json) => (json as { items: { id: string }[] }).items.map((row) => row.id),
+    supportsCursor: true,
+    encodeCursor: (id) => encodeMovementCursor({ createdAt: new Date(), id }),
+  },
   {
     kind: "list",
     name: "GET /api/warehouses",

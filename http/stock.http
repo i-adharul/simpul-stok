@@ -85,3 +85,11 @@ Content-Type: application/json
 Idempotency-Key: 6f1d2c1e-3b0a-4c55-9c1a-0f7d3b9a1e13
 
 { "warehouseId": "{{warehouseId}}", "productId": "{{productId}}", "mode": "DELTA", "value": -999999, "reason": "LOST" }
+
+### Movement history, first page (50 rows, newest first)
+# Expect 200 { items: [...], nextCursor: "..." | null }. Filters: productId, warehouseId, type, createdById, from, to.
+GET http://localhost:3000/api/stock/movements?type=RECEIVE&productId={{productId}}
+
+### Movement history, next page
+# Paste the nextCursor of the previous answer. A malformed cursor gives 400 VALIDATION_ERROR.
+GET http://localhost:3000/api/stock/movements?cursor=PASTE_NEXT_CURSOR
