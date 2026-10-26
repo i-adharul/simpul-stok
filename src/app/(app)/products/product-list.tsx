@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Archive, ArchiveRestore, Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -100,7 +101,11 @@ export function ProductList() {
                 {list.data.items.map((product) => (
                   <TableRow key={product.id}>
                     <TableCell className="font-mono text-xs font-semibold">{product.sku}</TableCell>
-                    <TableCell className="font-medium">{product.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <Link href={`/products/${product.id}`} className="hover:underline">
+                        {product.name}
+                      </Link>
+                    </TableCell>
                     <TableCell>{product.unit}</TableCell>
                     <TableCell className="text-right">{formatNumber(product.minStock)}</TableCell>
                     {canManage && (
