@@ -72,6 +72,10 @@ export function can(ctx: RequestContext, action: Action, resource: Resource = {}
   if (WAREHOUSE_READ.has(action) || WAREHOUSE_WRITE.has(action)) {
     return resource.warehouseId !== undefined && ctx.warehouseIds.includes(resource.warehouseId);
   }
+  // Reading one warehouse needs it to be assigned (and active); the list passes no warehouseId.
+  if (action === "warehouse.read" && resource.warehouseId !== undefined) {
+    return ctx.warehouseIds.includes(resource.warehouseId);
+  }
   return true;
 }
 
