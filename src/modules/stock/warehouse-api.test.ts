@@ -154,13 +154,19 @@ describe("GET /api/warehouses/:id", () => {
     expect((await get("OWNER", other.id)).status).toBe(200);
   });
 
-  it("returns 404 for another organization's warehouse and for an archived one", async () => {
+  it("returns 404 for another organization's warehouse", async () => {
     expect((await get("OWNER", t.b.warehouseId)).status).toBe(404);
+  });
+
+  it("returns an archived warehouse to the owner (to restore it) but 404 to a viewer", async () => {
     await prisma.warehouse.update({
       where: { id: t.a.warehouseId },
       data: { archivedAt: new Date() },
     });
-    expect((await get("OWNER", t.a.warehouseId)).status).toBe(404);
+    const owner = await get("OWNER", t.a.warehouseId);
+    expect(owner.status).toBe(200);
+    expect((await owner.json()).archivedAt).not.toBeNull();
+    expect((await get("VIEWER", t.a.warehouseId)).status).toBe(404);
   });
 });
 
@@ -178,10 +184,83 @@ describe("PATCH /api/warehouses/:id", () => {
     expect((await patch(t.a.warehouseId, { code: "W2" })).status).toBe(409);
   });
 
-  it("returns 400 for an empty body or archived, 403 for a viewer, 404 for a foreign id", async () => {
+  it("returns 400 for an empty body or a non-boolean archived, 403 for a viewer, 404 for a foreign id", async () => {
     expect((await patch(t.a.warehouseId, {})).status).toBe(400);
-    expect((await patch(t.a.warehouseId, { archived: true })).status).toBe(400);
+    expect((await patch(t.a.warehouseId, { archived: "yes" })).status).toBe(400);
     expect((await patch(t.a.warehouseId, { name: "x" }, "VIEWER")).status).toBe(403);
     expect((await patch(t.b.warehouseId, { name: "x" })).status).toBe(404);
+  });
+});
+
+describe("PATCH /api/warehouses/:id archive and restore (BL08)", () => {
+  const patch = (id: string, body: unknown, role: "OWNER" | "WAREHOUSE_ADMIN" = "OWNER") =>
+    call(itemRoute.PATCH, role, { method: "PATCH", path: `/api/warehouses/${id}`, id, body });
+  const archivedAt = async (id: string) =>
+    (await prisma.warehouse.findUniqueOrThrow({ where: { id } })).archivedAt;
+
+  async function putStock(organizationId: string, warehouseId: string, quantity: number) {
+    const product = await prisma.product.create({
+      data: {
+        organizationId,
+        sku: `SKU-${quantity}-${warehouseId.slice(-6).toUpperCase()}`,
+        name: "P",
+        unit: "pcs",
+      },
+    });
+    await prisma.stockLevel.create({
+      data: { organizationId, warehouseId, productId: product.id, quantity },
+    });
+  }
+
+  it("archives an empty warehouse and returns it with archivedAt", async () => {
+    const res = await patch(t.a.warehouseId, { archived: true });
+    expect(res.status).toBe(200);
+    expect((await res.json()).archivedAt).not.toBeNull();
+    expect(await archivedAt(t.a.warehouseId)).not.toBeNull();
+  });
+
+  it("archives a warehouse whose stock rows are all 0", async () => {
+    await putStock(t.a.organizationId, t.a.warehouseId, 0);
+    expect((await patch(t.a.warehouseId, { archived: true })).status).toBe(200);
+  });
+
+  it("returns 409 and keeps the warehouse active while any stock is above 0", async () => {
+    await putStock(t.a.organizationId, t.a.warehouseId, 3);
+    const res = await patch(t.a.warehouseId, { archived: true });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "CONFLICT" });
+    expect(await archivedAt(t.a.warehouseId)).toBeNull();
+  });
+
+  it("restores an archived warehouse", async () => {
+    await patch(t.a.warehouseId, { archived: true });
+    const res = await patch(t.a.warehouseId, { archived: false });
+    expect(res.status).toBe(200);
+    expect((await res.json()).archivedAt).toBeNull();
+    expect(await archivedAt(t.a.warehouseId)).toBeNull();
+  });
+
+  it("does not edit fields of an archived warehouse without restoring it", async () => {
+    await patch(t.a.warehouseId, { archived: true });
+    expect((await patch(t.a.warehouseId, { name: "x" })).status).toBe(404);
+  });
+
+  it("is 404 for a foreign warehouse and 403 for a Warehouse Admin", async () => {
+    expect((await patch(t.b.warehouseId, { archived: true })).status).toBe(404);
+    expect(await archivedAt(t.b.warehouseId)).toBeNull();
+    expect((await patch(t.a.warehouseId, { archived: true }, "WAREHOUSE_ADMIN")).status).toBe(403);
+  });
+
+  it("lists an archived warehouse only with includeArchived and restores it back into the list", async () => {
+    await patch(t.a.warehouseId, { archived: true });
+    const plain = await (
+      await call(listRoute.GET, "OWNER", { method: "GET", path: "/api/warehouses" })
+    ).json();
+    expect(plain.items.map((w: { id: string }) => w.id)).not.toContain(t.a.warehouseId);
+    await patch(t.a.warehouseId, { archived: false });
+    const after = await (
+      await call(listRoute.GET, "OWNER", { method: "GET", path: "/api/warehouses" })
+    ).json();
+    expect(after.items.map((w: { id: string }) => w.id)).toContain(t.a.warehouseId);
   });
 });

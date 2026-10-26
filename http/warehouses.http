@@ -40,3 +40,19 @@ Origin: http://localhost:3000
 Content-Type: application/json
 
 { "name": "Nama baru", "address": null }
+
+### Archive a warehouse (Owner only; replace the id)
+# Expect 200 with archivedAt set; 409 CONFLICT while any stock is above 0
+PATCH http://localhost:3000/api/warehouses/00000000-0000-0000-0000-000000000000
+Origin: http://localhost:3000
+Content-Type: application/json
+
+{ "archived": true }
+
+### Restore a warehouse (Owner only; replace the id)
+# Expect 200 with archivedAt null; the Owner can GET an archived warehouse, other roles get 404
+PATCH http://localhost:3000/api/warehouses/00000000-0000-0000-0000-000000000000
+Origin: http://localhost:3000
+Content-Type: application/json
+
+{ "archived": false }

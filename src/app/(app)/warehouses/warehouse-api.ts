@@ -14,8 +14,17 @@ export type WarehousePage = { items: Warehouse[]; total: number; page: number; p
 export const WAREHOUSES_QUERY_KEY = ["warehouses"] as const;
 export const PAGE_SIZE = 20;
 
-export function fetchWarehouses(page: number): Promise<WarehousePage> {
-  return apiFetch<WarehousePage>(`/api/warehouses?page=${page}&pageSize=${PAGE_SIZE}`);
+export function fetchWarehouses(page: number, includeArchived = false): Promise<WarehousePage> {
+  const archived = includeArchived ? "&includeArchived=true" : "";
+  return apiFetch<WarehousePage>(`/api/warehouses?page=${page}&pageSize=${PAGE_SIZE}${archived}`);
+}
+
+// P03. The server refuses to archive a warehouse that still holds stock (409).
+export function setWarehouseArchived(id: string, archived: boolean): Promise<Warehouse> {
+  return apiFetch<Warehouse>(`/api/warehouses/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ archived }),
+  });
 }
 
 // An empty address is sent as null so the API stores it as null (so an edit can clear it).
