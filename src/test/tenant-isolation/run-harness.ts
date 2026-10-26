@@ -13,7 +13,7 @@ import {
   type TwoTenants,
 } from "./fixtures";
 import { isOrganizationAction } from "../../modules/platform/can";
-import type { ItemEndpoint, ListEndpoint, TenantEndpoint } from "./registry";
+import type { CreateEndpoint, ItemEndpoint, ListEndpoint, TenantEndpoint } from "./registry";
 
 // The cross-tenant harness (BL03, test plan "Tenant isolation"). describeTenantIsolation() turns one
 // registry entry into a fixed list of checks, each run from organization A's session against
@@ -29,6 +29,7 @@ export const CHECK_NAMES = {
   untouched: "another organization's row is left untouched",
   listClean: "list contains none of the other organization's rows",
   cursorClean: "cursor holding another organization's id leaks nothing",
+  foreignKey: "foreign key of another organization gets the same response as a missing one",
   bodyOrganization: "organizationId from the request is ignored or rejected",
   idempotencyKey: "write without a valid Idempotency-Key gets 400",
   sameKeyTwice: "same key twice gives one effect and the same body",
@@ -169,6 +170,8 @@ const isOrganizationWrite = (e: TenantEndpoint): e is TenantEndpoint =>
 const hasCursor = (e: TenantEndpoint): e is ListEndpoint => isList(e) && e.supportsCursor === true;
 const isIdempotentWrite = (e: TenantEndpoint): e is TenantEndpoint =>
   e.idempotent === true && e.method !== "GET";
+const hasForeignBodies = (e: TenantEndpoint): e is CreateEndpoint =>
+  e.kind === "create" && e.foreignBodies !== undefined;
 const takesInput = (e: TenantEndpoint): e is TenantEndpoint =>
   e.kind !== "item" || (e.method !== "GET" && e.body !== undefined);
 
@@ -305,6 +308,41 @@ export const CHECKS: Check[] = [
       }
     } else if (reply.status !== 400 && reply.status !== 404) {
       fail(CHECK_NAMES.cursorClean, `expected 200, 400 or 404, got ${describeReply(reply)}`);
+    }
+  }),
+  defineCheck(CHECK_NAMES.foreignKey, hasForeignBodies, async (tenants, endpoint) => {
+    // Rule 2 for a key in the body. Each variant swaps ONE key for B's; the answer must equal the one
+    // for a random UUID in the same place, so the caller cannot tell "not yours" from "does not
+    // exist". Nothing may be written, in either organization.
+    const snapshot = async () =>
+      JSON.stringify([
+        await endpoint.countRows(tenants.prisma, tenants.a.organizationId),
+        await endpoint.countRows(tenants.prisma, tenants.b.organizationId),
+        (await endpoint.readRow?.(tenants.prisma, tenants)) ?? null,
+      ]);
+    const before = await snapshot();
+    for (const role of endpoint.allowedRoles) {
+      for (const variant of endpoint.foreignBodies?.(tenants) ?? []) {
+        const caller = asA(tenants, role);
+        const foreign = await send(endpoint, tenants, caller, { body: variant.body });
+        const missing = await send(endpoint, tenants, caller, { body: variant.missingBody });
+        const label = `${role}, ${variant.name}`;
+        if (missing.status !== variant.status) {
+          fail(
+            CHECK_NAMES.foreignKey,
+            `${label}: a random UUID must give ${variant.status}, got ${describeReply(missing)}`,
+          );
+        }
+        if (foreign.status !== missing.status || foreign.text !== missing.text) {
+          fail(
+            CHECK_NAMES.foreignKey,
+            `${label}: another organization's key differs from a missing one: ${describeReply(foreign)} vs ${describeReply(missing)}`,
+          );
+        }
+      }
+    }
+    if ((await snapshot()) !== before) {
+      fail(CHECK_NAMES.foreignKey, "a request with a foreign key wrote something");
     }
   }),
   defineCheck(CHECK_NAMES.bodyOrganization, takesInput, async (tenants, endpoint) => {

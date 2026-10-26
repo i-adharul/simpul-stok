@@ -19,6 +19,7 @@ import { rolesFor, type CreateEndpoint } from "../tenant-isolation/registry";
 export const IDEMPOTENCY_FLAWS = [
   "ignores-idempotency-header",
   "never-calls-runIdempotent",
+  "trusts-foreign-product",
 ] as const;
 export type IdempotencyFlaw = (typeof IDEMPOTENCY_FLAWS)[number];
 
@@ -59,6 +60,7 @@ export function createIdempotentTestRoutes(
   options: { flaws?: readonly IdempotencyFlaw[]; workDelayMs?: number } = {},
 ): IdempotentTestRoutes {
   const ignoresHeader = options.flaws?.includes("ignores-idempotency-header") ?? false;
+  const trustsForeignProduct = options.flaws?.includes("trusts-foreign-product") ?? false;
   const neverCalls = options.flaws?.includes("never-calls-runIdempotent") ?? false;
   const prisma = createTestPrisma(assertTestDatabaseUrl(env.TEST_DATABASE_URL));
   const withTenantRoute = createTenantRoute({ prisma, secret: env.SESSION_SECRET });
@@ -73,7 +75,8 @@ export function createIdempotentTestRoutes(
       // a replay.
       authorize(ctx, "stock.receive", { warehouseId });
       await assertOwnedIds(db, "warehouse", [warehouseId]);
-      await assertOwnedIds(db, "product", [productId]);
+      // The flaw: the product id is used as given, so a product of another organization is accepted.
+      if (!trustsForeignProduct) await assertOwnedIds(db, "product", [productId]);
       if (neverCalls) {
         // The flaw: the option and the header check are there, but the effect runs directly, so a
         // repeated key acts again.
@@ -132,6 +135,20 @@ export function createIdempotentTestRoutes(
     body: (t) => ({ warehouseId: t.a.warehouseId, productId: t.a.productId, quantity: 3 }),
     countRows: (client, organizationId) =>
       client.stockMovement.count({ where: { organizationId } }),
+    foreignBodies: (t) => [
+      {
+        name: "warehouse of B",
+        body: { warehouseId: t.b.warehouseId, productId: t.a.productId, quantity: 3 },
+        missingBody: { warehouseId: randomUUID(), productId: t.a.productId, quantity: 3 },
+        status: 403,
+      },
+      {
+        name: "product of B",
+        body: { warehouseId: t.a.warehouseId, productId: t.b.productId, quantity: 3 },
+        missingBody: { warehouseId: t.a.warehouseId, productId: randomUUID(), quantity: 3 },
+        status: 404,
+      },
+    ],
   };
 
   return { POST, endpoint, prisma, dispose: () => prisma.$disconnect() };

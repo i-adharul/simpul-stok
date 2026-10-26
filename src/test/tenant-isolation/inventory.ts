@@ -161,3 +161,81 @@ export function idempotencyProblems(
   }
   return problems;
 }
+
+// Every foreign key in the body of a stock write needs its own foreignBodies variant, so a new endpoint (adjust,
+// transfer, import commit) or a new key (the destination warehouse) cannot slip past the check "foreign key of
+// another organization gets the same response as a missing one". A key is a body property that ends in "Id" and
+// holds a UUID. The variant must replace EXACTLY that key (the others stay valid) and its missingBody must
+// replace the same key with a different UUID.
+const UUID_VALUE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+type ForeignKeyEntry = {
+  name: string;
+  route: string;
+  method: string;
+  body?: (tenants: never) => unknown;
+  foreignBodies?: (tenants: never) => { name: string; body: unknown; missingBody: unknown }[];
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const idKeysOf = (body: unknown): string[] =>
+  isRecord(body)
+    ? Object.entries(body)
+        .filter(
+          ([key, value]) =>
+            key.endsWith("Id") && typeof value === "string" && UUID_VALUE.test(value),
+        )
+        .map(([key]) => key)
+    : [];
+
+// The keys whose value differs between two bodies.
+const changedKeys = (base: Record<string, unknown>, other: unknown): string[] =>
+  isRecord(other)
+    ? [...new Set([...Object.keys(base), ...Object.keys(other)])].filter(
+        (key) => JSON.stringify(base[key]) !== JSON.stringify(other[key]),
+      )
+    : ["(not an object)"];
+
+export function foreignKeyProblems(endpoints: ForeignKeyEntry[], tenants: unknown): string[] {
+  const problems: string[] = [];
+  for (const endpoint of endpoints) {
+    const writes = endpoint.method !== "GET";
+    if (!writes || !IDEMPOTENT_ROUTE_PREFIXES.some((prefix) => endpoint.route.startsWith(prefix))) {
+      continue;
+    }
+    const body = endpoint.body?.(tenants as never);
+    const keys = idKeysOf(body);
+    const variants = endpoint.foreignBodies?.(tenants as never) ?? [];
+    if (keys.length > 0 && variants.length === 0) {
+      problems.push(
+        `${endpoint.name}: the body has the id keys [${keys}], but the entry has no foreignBodies`,
+      );
+      continue;
+    }
+    const covered = new Set<string>();
+    for (const variant of variants) {
+      const foreign = changedKeys(body as Record<string, unknown>, variant.body);
+      const missing = changedKeys(body as Record<string, unknown>, variant.missingBody);
+      const key = foreign[0];
+      if (foreign.length !== 1 || !keys.includes(key)) {
+        problems.push(
+          `${endpoint.name}: variant "${variant.name}" must replace exactly one id key of the body, it changes [${foreign}]`,
+        );
+      } else if (missing.length !== 1 || missing[0] !== key) {
+        problems.push(
+          `${endpoint.name}: the missingBody of "${variant.name}" must replace exactly "${key}", it changes [${missing}]`,
+        );
+      } else {
+        covered.add(key);
+      }
+    }
+    for (const key of keys) {
+      if (!covered.has(key)) {
+        problems.push(`${endpoint.name}: the id key "${key}" has no foreignBodies variant`);
+      }
+    }
+  }
+  return problems;
+}

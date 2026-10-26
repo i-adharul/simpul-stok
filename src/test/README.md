@@ -48,6 +48,16 @@ against the test database. Design: issue #38.
 }
 ```
 
+For a `kind: "create"` entry whose body carries ids, add `foreignBodies(t)`: one variant per foreign key, each with
+the other keys valid, a `missingBody` with a random UUID in the same place, and the expected `status` (403 when the
+service authorizes the key first, as for a warehouse; 404 when it looks the key up, as for a product). The harness
+check "foreign key of another organization gets the same response as a missing one" needs the two answers to be
+byte-identical and nothing written. `readRow(prisma, t)` (optional) returns state that `countRows` does not see,
+for example the stock quantity of the pair, and must be unchanged afterwards. E5 transfers reuse it for the
+destination warehouse. `inventory.test.ts` enforces it: a write under `stock/`, `transfers` or `imports`
+whose `body(t)` holds a key ending in `Id` with a UUID needs one `foreignBodies` variant per such key, replacing
+exactly that key (and a `missingBody` that replaces the same key); otherwise CI fails.
+
 Use `kind: "list"` (`path`, `createRow`, `idsOf`, optional `supportsCursor` and `encodeCursor`) for a list,
 and `kind: "create"` (`path`, `body`, `countRows`) for a POST that creates a row.
 Unique columns (sku, code) in `createRow` can use `t.unique("x")`; warehouse codes and SKUs must be uppercase. 2. A route that cannot be tested this way goes in `EXEMPT_ROUTES` with a reason. A route that is not a tenant

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { EXEMPT_ROUTES, IDEMPOTENCY_EXEMPT, PUBLIC_ROUTES } from "./exemptions";
 import {
   allowedRolesProblems,
+  foreignKeyProblems,
   idempotencyProblems,
   inventoryProblems,
   loadRoutes,
@@ -9,6 +10,14 @@ import {
   type RouteInfo,
 } from "./inventory";
 import { TENANT_ENDPOINTS, rolesFor } from "./registry";
+
+// Ids shaped like UUIDs, so a body(t) can be read without a database.
+const id = (n: number) => `00000000-0000-7000-8000-${String(n).padStart(12, "0")}`;
+const fakeTenants = {
+  a: { warehouseId: id(1), productId: id(2), organizationId: id(3) },
+  b: { warehouseId: id(4), productId: id(5), organizationId: id(6) },
+  unique: (prefix: string) => `${prefix}-1`,
+};
 
 // CI gate: no route.ts without a decision about its cross-tenant test.
 describe("route inventory (real routes)", () => {
@@ -30,6 +39,10 @@ describe("route inventory (real routes)", () => {
 
   it("marks every stock write endpoint idempotent: true, or lists it with a reason", () => {
     expect(idempotencyProblems(TENANT_ENDPOINTS, IDEMPOTENCY_EXEMPT)).toEqual([]);
+  });
+
+  it("gives every id key in the body of a stock write its own foreignBodies variant", () => {
+    expect(foreignKeyProblems(TENANT_ENDPOINTS, fakeTenants)).toEqual([]);
   });
 
   it("registers each endpoint once and with a name that says its method and route", () => {
@@ -194,5 +207,76 @@ describe("idempotencyProblems (synthetic entries)", () => {
     expect(idempotencyProblems([entry], { "POST /api/imports": " " })).toEqual([
       expect.stringContaining('IDEMPOTENCY_EXEMPT "POST /api/imports" has no reason'),
     ]);
+  });
+});
+
+describe("foreignKeyProblems (synthetic entries)", () => {
+  type T = typeof fakeTenants;
+  const missingId = id(99);
+  const entry = (
+    foreignBodies?: (t: T) => { name: string; body: unknown; missingBody: unknown }[],
+    route = "stock/receive",
+  ) => ({
+    name: `POST /api/${route}`,
+    route,
+    method: "POST",
+    body: (t: T) => ({ warehouseId: t.a.warehouseId, productId: t.a.productId, quantity: 1 }),
+    foreignBodies: foreignBodies as never,
+  });
+  const both = (t: T) => [
+    {
+      name: "warehouse of B",
+      body: { warehouseId: t.b.warehouseId, productId: t.a.productId, quantity: 1 },
+      missingBody: { warehouseId: missingId, productId: t.a.productId, quantity: 1 },
+    },
+    {
+      name: "product of B",
+      body: { warehouseId: t.a.warehouseId, productId: t.b.productId, quantity: 1 },
+      missingBody: { warehouseId: t.a.warehouseId, productId: missingId, quantity: 1 },
+    },
+  ];
+
+  it("accepts an entry with one variant per id key", () => {
+    expect(foreignKeyProblems([entry(both)], fakeTenants)).toEqual([]);
+  });
+
+  it("fails an entry without foreignBodies", () => {
+    expect(foreignKeyProblems([entry()], fakeTenants)).toEqual([
+      expect.stringContaining("has no foreignBodies"),
+    ]);
+  });
+
+  it("fails an id key that has no variant", () => {
+    expect(foreignKeyProblems([entry((t) => [both(t)[0]])], fakeTenants)).toEqual([
+      expect.stringContaining('the id key "productId" has no foreignBodies variant'),
+    ]);
+  });
+
+  it("fails a variant that changes more than one key, or the wrong key in missingBody", () => {
+    const twoKeys = (t: T) => [
+      {
+        name: "both of B",
+        body: { warehouseId: t.b.warehouseId, productId: t.b.productId, quantity: 1 },
+        missingBody: { warehouseId: missingId, productId: missingId, quantity: 1 },
+      },
+    ];
+    expect(foreignKeyProblems([entry(twoKeys)], fakeTenants)[0]).toContain(
+      "must replace exactly one id key",
+    );
+    const wrongMissing = (t: T) => [
+      {
+        ...both(t)[0],
+        missingBody: { warehouseId: t.a.warehouseId, productId: missingId, quantity: 1 },
+      },
+      both(t)[1],
+    ];
+    expect(foreignKeyProblems([entry(wrongMissing)], fakeTenants)[0]).toContain(
+      'the missingBody of "warehouse of B" must replace exactly "warehouseId"',
+    );
+  });
+
+  it("ignores reads and writes outside stock/, transfers and imports", () => {
+    expect(foreignKeyProblems([entry(undefined, "warehouses")], fakeTenants)).toEqual([]);
+    expect(foreignKeyProblems([{ ...entry(), method: "GET" }], fakeTenants)).toEqual([]);
   });
 });
