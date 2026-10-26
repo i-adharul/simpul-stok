@@ -35,8 +35,10 @@ export function forbidden(message = "Anda tidak punya akses untuk tindakan ini."
   return errorResponse(403, ERROR_CODES.FORBIDDEN, message);
 }
 
+const NOT_FOUND_MESSAGE = "Data tidak ditemukan.";
+
 // Also used for another organization's resource (rule 2): same body, so existence is not revealed.
-export function notFound(message = "Data tidak ditemukan.") {
+export function notFound(message = NOT_FOUND_MESSAGE) {
   return errorResponse(404, ERROR_CODES.NOT_FOUND, message);
 }
 
@@ -82,4 +84,11 @@ export class ApiError extends Error {
   toResponse(): Response {
     return errorResponse(this.status, this.code, this.message, this.details);
   }
+}
+
+// The ONE 404 for "missing" and "belongs to another organization" (rule 2). Services, the ownership
+// helpers and the tenant client all throw this, so the bodies cannot drift apart; the cross-tenant
+// harness compares them byte for byte.
+export function notFoundError(): ApiError {
+  return new ApiError(404, ERROR_CODES.NOT_FOUND, NOT_FOUND_MESSAGE);
 }

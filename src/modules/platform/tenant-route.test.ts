@@ -5,7 +5,7 @@ import type { PrismaClient } from "../../generated/prisma/client";
 import { assertTestDatabaseUrl, createTestPrisma } from "../../test/test-database";
 import { DEMO_ACCOUNTS, seedBase } from "./seed";
 import { SESSION_COOKIE_NAME, createSessionToken } from "./session";
-import { createTenantRoute } from "./tenant-route";
+import { createTenantRoute, isTenantGuard } from "./tenant-route";
 
 const secret = env.SESSION_SECRET;
 let prisma: PrismaClient;
@@ -107,6 +107,44 @@ describe("withTenantRoute", () => {
     expect(handler).toHaveBeenCalledWith(
       expect.objectContaining({ userId: userIds.OWNER, organizationId, role: "OWNER" }),
     );
+  });
+
+  describe("requires", () => {
+    const guarded = () =>
+      withTenantRoute(
+        async (_request, _input, tenant) => {
+          handler(tenant.ctx);
+          return Response.json({ ok: true });
+        },
+        { body: bodySchema, requires: "warehouse.manage" },
+      );
+
+    it("returns 403 for a role without the right, even with an invalid body", async () => {
+      for (const role of ["WAREHOUSE_ADMIN", "VIEWER"]) {
+        const response = await guarded()(await post({}, role));
+        expect(response.status, role).toBe(403);
+        expect(await response.json()).toMatchObject({ code: "FORBIDDEN" });
+      }
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it("lets a role with the right reach the input check (400) and the handler (200)", async () => {
+      expect((await guarded()(await post({}, "OWNER"))).status).toBe(400);
+      expect((await guarded()(await post({ name: "ok" }, "OWNER"))).status).toBe(200);
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it("still answers 401 without a session and 403 for a platform admin", async () => {
+      expect((await guarded()(await post({}))).status).toBe(401);
+      expect((await guarded()(await post({}, "PLATFORM_ADMIN"))).status).toBe(403);
+    });
+  });
+
+  it("marks its guard so the route inventory can tell a tenant route from a public one", () => {
+    const wrapped = withTenantRoute(async () => new Response(null), { body: "none" });
+    expect(isTenantGuard(wrapped.apiOptions.guard)).toBe(true);
+    expect(isTenantGuard(undefined)).toBe(false);
+    expect(isTenantGuard(async () => undefined)).toBe(false);
   });
 
   it("keeps the route options readable for route-validation.test.ts", () => {

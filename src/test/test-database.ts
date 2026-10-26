@@ -18,6 +18,26 @@ export function assertTestDatabaseUrl(url: string | undefined): string {
   return url;
 }
 
+// Route modules open their own connection from DATABASE_URL, while fixtures use TEST_DATABASE_URL.
+// If they differed, a harness would read one database and write another and pass for the wrong
+// reason. Host, port and database name are compared; the message never contains the URL.
+export function assertSameTestDatabase(
+  databaseUrl: string | undefined,
+  testDatabaseUrl: string | undefined,
+): void {
+  if (!databaseUrl) throw new Error("DATABASE_URL is not set for the test workers.");
+  const test = new URL(assertTestDatabaseUrl(testDatabaseUrl));
+  const actual = new URL(databaseUrl);
+  const where = (u: URL) => `${u.hostname}:${u.port || "5432"}${u.pathname}`;
+  if (where(actual) !== where(test)) {
+    throw new Error(
+      `DATABASE_URL must be the same database as TEST_DATABASE_URL under Vitest ` +
+        `(got ${where(actual)}, expected ${where(test)}).`,
+    );
+  }
+  assertTestDatabaseUrl(databaseUrl);
+}
+
 export function createTestPrisma(testDatabaseUrl: string): PrismaClient {
   return new PrismaClient({
     adapter: new PrismaPg({ connectionString: assertTestDatabaseUrl(testDatabaseUrl) }),

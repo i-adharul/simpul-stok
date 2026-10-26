@@ -32,7 +32,15 @@ from `withTenantRoute` (`tenant-route.ts`) as `{ ctx, db }`; services take the `
 - **Lint:** only the files in `PLAIN_CLIENT_ALLOWLIST` (`eslint.config.mjs`) may import `@/lib/db` or the
   `PrismaClient` type. Raw SQL needs an entry in `RAW_SQL_ALLOWLIST` that cites an ADR.
 - **New tenant table:** add it to `TENANT_MODELS`; `tenant-client.test.ts` fails until you do.
-- **Route order** in `withTenantRoute`: context (401, 403), input (400), handler.
+- **Route order** in `withTenantRoute`: context (401, 403), `requires` (403), input (400), handler. `requires`
+  takes an organization-level action only (`warehouse.*`, `product.*`, `member.manage`, `subscription.manage`).
+  Warehouse-level actions (`stock.*`, `history.read`) need a `warehouseId`, so the handler calls `authorize()`
+  itself, after validation.
 - **Unique violations:** Prisma `P2002` is not mapped here. The service maps it to 409 (a shared helper comes
   in E3-01).
 - **Not on `TenantClient`:** `$connect`, `$disconnect`, `$on`, `$extends` and raw SQL.
+- **Cross-tenant tests:** a new tenant endpoint is registered in `src/test/tenant-isolation/registry.ts` in the
+  same story (or listed with a reason in `exemptions.ts`); `inventory.test.ts` fails CI otherwise. See
+  `src/test/README.md`.
+- **404:** throw `notFoundError()` from `src/lib/api-error.ts`. It is the only definition of the message, so a
+  missing row and another organization's row produce byte-identical bodies.

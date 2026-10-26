@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient } from "../../generated/prisma/client";
-import { ApiError, ERROR_CODES } from "../../lib/api-error";
+import { notFoundError } from "../../lib/api-error";
 import type { RequestContext } from "./request-context";
 
 // Tenant-scoped data access (CLAUDE.md rule 3, BL03, docs/03_Data_Model.md tenant isolation rule 2).
@@ -231,10 +231,7 @@ function isNotFound(error: unknown): boolean {
 }
 
 // Rule 2: a row of another organization looks exactly like a row that does not exist. Prisma throws
-// P2025 for update/delete/…OrThrow on no match, which would otherwise surface as a 500.
-function notFoundError(): ApiError {
-  return new ApiError(404, ERROR_CODES.NOT_FOUND, "Data tidak ditemukan.");
-}
+// P2025 for update/delete/…OrThrow on no match; mapping it to notFoundError() avoids a 500.
 
 function scopeArgs(model: string, operation: string, args: Args, organizationId: string): Args {
   if ((TENANT_MODELS as readonly string[]).includes(model)) {
