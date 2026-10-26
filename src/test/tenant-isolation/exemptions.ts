@@ -14,3 +14,8 @@ export const PUBLIC_ROUTES: Record<string, string> = {
   me: "The signed-in user's own profile, read through getCurrentUser; no tenant resource ID.",
   "me/password": "The signed-in user changes their own password; no tenant resource ID.",
 };
+
+// A registry entry that writes under stock/, transfers or imports must be `idempotent: true`
+// (inventory.test.ts). One that really needs no Idempotency-Key is listed here by its name, for
+// example "POST /api/imports", with the reason. Adding an entry is a decision a reviewer may reject.
+export const IDEMPOTENCY_EXEMPT: Record<string, string> = {};

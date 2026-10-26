@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { EXEMPT_ROUTES, PUBLIC_ROUTES } from "./exemptions";
+import { EXEMPT_ROUTES, IDEMPOTENCY_EXEMPT, PUBLIC_ROUTES } from "./exemptions";
 import {
   allowedRolesProblems,
+  idempotencyProblems,
   inventoryProblems,
   loadRoutes,
   type InventoryInput,
@@ -25,6 +26,10 @@ describe("route inventory (real routes)", () => {
 
   it("derives every allowedRoles from can() through rolesFor(action)", () => {
     expect(allowedRolesProblems(TENANT_ENDPOINTS, rolesFor)).toEqual([]);
+  });
+
+  it("marks every stock write endpoint idempotent: true, or lists it with a reason", () => {
+    expect(idempotencyProblems(TENANT_ENDPOINTS, IDEMPOTENCY_EXEMPT)).toEqual([]);
   });
 
   it("registers each endpoint once and with a name that says its method and route", () => {
@@ -151,5 +156,43 @@ describe("allowedRolesProblems (synthetic entries)", () => {
       expect.stringContaining('differs from rolesFor("warehouse.manage") [OWNER]'),
     ]);
     expect(allowedRolesProblems([entry([])], rolesFor)).toHaveLength(1);
+  });
+});
+
+describe("idempotencyProblems (synthetic entries)", () => {
+  const write = (route: string, extra: { idempotent?: true } = {}) => ({
+    name: `POST /api/${route}`,
+    route,
+    method: "POST",
+    ...extra,
+  });
+
+  it("accepts stock writes that are idempotent, and writes elsewhere that are not", () => {
+    const entries = [write("stock/receive", { idempotent: true }), write("warehouses")];
+    expect(idempotencyProblems(entries, {})).toEqual([]);
+  });
+
+  it("fails a write under stock/, transfers or imports that is not idempotent", () => {
+    for (const route of ["stock/receive", "stock/transfers", "transfers/[id]/cancel", "imports"]) {
+      expect(idempotencyProblems([write(route)], {}), route).toEqual([
+        expect.stringContaining("must be idempotent: true"),
+      ]);
+    }
+  });
+
+  it("does not ask a read for a key, and fails idempotent set on a read", () => {
+    const read = { name: "GET /api/stock", route: "stock/x", method: "GET" };
+    expect(idempotencyProblems([read], {})).toEqual([]);
+    expect(idempotencyProblems([{ ...read, idempotent: true }], {})).toEqual([
+      expect.stringContaining("idempotent is set on a GET"),
+    ]);
+  });
+
+  it("accepts a listed exemption, and fails one without a reason", () => {
+    const entry = write("imports");
+    expect(idempotencyProblems([entry], { "POST /api/imports": "preview only" })).toEqual([]);
+    expect(idempotencyProblems([entry], { "POST /api/imports": " " })).toEqual([
+      expect.stringContaining('IDEMPOTENCY_EXEMPT "POST /api/imports" has no reason'),
+    ]);
   });
 });
