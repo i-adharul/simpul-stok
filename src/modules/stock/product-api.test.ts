@@ -109,6 +109,25 @@ describe("GET /api/products", () => {
     expect(json.items.map((p: { sku: string }) => p.sku)).toEqual(["A2"]);
   });
 
+  it("returns an empty items array for a page beyond the last page, never another organization's rows", async () => {
+    await makeProduct(t.b.organizationId, "B1");
+    for (const path of ["/api/products?page=99", "/api/products?page=2&pageSize=1"]) {
+      const json = await (await list(path)).json();
+      expect(json.items, path).toEqual([]);
+      expect(json.total, path).toBe(1);
+    }
+  });
+
+  it("returns 400 for page 0, a negative page, a non-number and a page size of 0", async () => {
+    for (const q of ["page=0", "page=-1", "page=abc", "pageSize=0"]) {
+      expect((await list(`/api/products?${q}`)).status, q).toBe(400);
+    }
+  });
+
+  it("accepts the largest page size, 100", async () => {
+    expect((await list("/api/products?pageSize=100")).status).toBe(200);
+  });
+
   it("every tenant role can read", async () => {
     await makeProduct(t.a.organizationId, "A1");
     for (const role of ["OWNER", "WAREHOUSE_ADMIN", "VIEWER"] as const) {

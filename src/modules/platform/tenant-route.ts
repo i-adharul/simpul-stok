@@ -65,12 +65,29 @@ export function createTenantRoute(deps: { prisma: PrismaClient; secret: string }
       },
       { [TENANT_GUARD]: true },
     );
-    return withApiLog<O & { guard: typeof guard }, Context>(
+    const wrapped = withApiLog<O & { guard: typeof guard }, Context>(
       (request, input, context, tenant) =>
         handler(request, input as ApiInput<O>, tenant as TenantRouteArgs, context),
       { ...options, guard } as O & { guard: typeof guard },
     );
+    // Data of one organization must never sit in a shared cache, also on an error response (401, 403,
+    // 404). Applied outside withApiLog so the responses it builds itself are covered. A handler that
+    // set its own Cache-Control keeps it.
+    const route = async (request: Request, context?: Context): Promise<Response> =>
+      noStore(await wrapped(request, context));
+    return Object.assign(route, { apiOptions: wrapped.apiOptions });
   };
+}
+
+function noStore(response: Response): Response {
+  if (response.headers.has("Cache-Control")) return response;
+  const headers = new Headers(response.headers);
+  headers.set("Cache-Control", "no-store");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 // Plain client on purpose: the context and the tenant client are built from it, per request.

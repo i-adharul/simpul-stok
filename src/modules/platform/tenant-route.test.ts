@@ -140,6 +140,40 @@ describe("withTenantRoute", () => {
     });
   });
 
+  describe("Cache-Control", () => {
+    const own = () =>
+      withTenantRoute(
+        async () => Response.json({ ok: true }, { headers: { "Cache-Control": "max-age=60" } }),
+        {
+          body: "none",
+        },
+      );
+    const plain = () => withTenantRoute(async () => Response.json({ ok: true }), { body: "none" });
+
+    it("adds no-store to a success response", async () => {
+      const response = await plain()(await post({}, "OWNER"));
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    });
+
+    it("adds no-store to error responses (401, 403, 400)", async () => {
+      const unauthenticated = await plain()(await post({}));
+      expect(unauthenticated.status).toBe(401);
+      expect(unauthenticated.headers.get("cache-control")).toBe("no-store");
+      const admin = await plain()(await post({}, "PLATFORM_ADMIN"));
+      expect(admin.status).toBe(403);
+      expect(admin.headers.get("cache-control")).toBe("no-store");
+      const invalid = await route()(await post({ name: "" }, "OWNER"));
+      expect(invalid.status).toBe(400);
+      expect(invalid.headers.get("cache-control")).toBe("no-store");
+    });
+
+    it("keeps a Cache-Control the handler set itself", async () => {
+      const response = await own()(await post({}, "OWNER"));
+      expect(response.headers.get("cache-control")).toBe("max-age=60");
+    });
+  });
+
   it("marks its guard so the route inventory can tell a tenant route from a public one", () => {
     const wrapped = withTenantRoute(async () => new Response(null), { body: "none" });
     expect(isTenantGuard(wrapped.apiOptions.guard)).toBe(true);
