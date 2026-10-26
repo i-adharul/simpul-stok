@@ -11,6 +11,7 @@ import { LoadingSkeleton } from "@/components/states/loading-skeleton";
 import { fetchMe, ME_QUERY_KEY } from "@/components/app-shell/shell-user";
 import { ApiError } from "@/lib/api-client";
 import { formatDateWib, formatNumber } from "@/lib/format";
+import { ReceiveStockButton } from "../stock/stock-receive-dialog";
 import { ProductArchiveDialog } from "./product-archive-dialog";
 import { ProductFormDialog } from "./product-form-dialog";
 import { fetchProduct, productKey, type Product } from "./product-api";
@@ -66,20 +67,23 @@ function Body({ product, canManage }: { product: Product; canManage: boolean }) 
             {product.sku}
           </span>
         </div>
-        {canManage && (
-          <div className="flex flex-wrap gap-2">
-            {!archived && (
-              <Button variant="outline" onClick={() => setEditing(true)}>
-                <Pencil aria-hidden />
-                Ubah
+        <div className="flex flex-wrap gap-2">
+          {!archived && <ReceiveStockButton productId={product.id} />}
+          {canManage && (
+            <>
+              {!archived && (
+                <Button variant="outline" onClick={() => setEditing(true)}>
+                  <Pencil aria-hidden />
+                  Ubah
+                </Button>
+              )}
+              <Button variant="outline" onClick={() => setArchiving(true)}>
+                {archived ? <ArchiveRestore aria-hidden /> : <Archive aria-hidden />}
+                {archived ? "Pulihkan" : "Arsipkan"}
               </Button>
-            )}
-            <Button variant="outline" onClick={() => setArchiving(true)}>
-              {archived ? <ArchiveRestore aria-hidden /> : <Archive aria-hidden />}
-              {archived ? "Pulihkan" : "Arsipkan"}
-            </Button>
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
 
       <dl className="grid gap-4 rounded-xl border bg-card p-4 sm:grid-cols-2">

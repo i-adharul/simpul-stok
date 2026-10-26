@@ -10,6 +10,7 @@ import { ErrorBanner } from "@/components/states/error-banner";
 import { LoadingSkeleton } from "@/components/states/loading-skeleton";
 import { fetchMe, ME_QUERY_KEY } from "@/components/app-shell/shell-user";
 import { ApiError } from "@/lib/api-client";
+import { ReceiveStockButton } from "../stock/stock-receive-dialog";
 import { WarehouseArchiveDialog } from "./warehouse-archive-dialog";
 import { WarehouseFormDialog } from "./warehouse-form-dialog";
 import { WarehouseMembersDialog } from "./warehouse-members-dialog";
@@ -68,26 +69,29 @@ function Body({ warehouse, canManage }: { warehouse: Detail; canManage: boolean 
           <p className="text-sm text-muted-foreground">{warehouse.address ?? "-"}</p>
           <p className="text-sm">{archived ? "Diarsipkan" : "Aktif"}</p>
         </div>
-        {canManage && (
-          <div className="flex flex-wrap gap-2">
-            {!archived && (
-              <>
-                <Button variant="outline" onClick={() => setEditing(true)}>
-                  <Pencil aria-hidden />
-                  Ubah
-                </Button>
-                <Button variant="outline" onClick={() => setAssigning(true)}>
-                  <Users aria-hidden />
-                  Tugaskan pengguna
-                </Button>
-              </>
-            )}
-            <Button variant="outline" onClick={() => setArchiving(true)}>
-              {archived ? <ArchiveRestore aria-hidden /> : <Archive aria-hidden />}
-              {archived ? "Pulihkan" : "Arsipkan"}
-            </Button>
-          </div>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {!archived && <ReceiveStockButton warehouseId={warehouse.id} />}
+          {canManage && (
+            <>
+              {!archived && (
+                <>
+                  <Button variant="outline" onClick={() => setEditing(true)}>
+                    <Pencil aria-hidden />
+                    Ubah
+                  </Button>
+                  <Button variant="outline" onClick={() => setAssigning(true)}>
+                    <Users aria-hidden />
+                    Tugaskan pengguna
+                  </Button>
+                </>
+              )}
+              <Button variant="outline" onClick={() => setArchiving(true)}>
+                {archived ? <ArchiveRestore aria-hidden /> : <Archive aria-hidden />}
+                {archived ? "Pulihkan" : "Arsipkan"}
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       <section aria-labelledby="assigned-title" className="rounded-xl border bg-card p-4">
