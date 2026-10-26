@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Pencil, Plus } from "lucide-react";
+import { Archive, ArchiveRestore, Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -18,6 +18,7 @@ import { LoadingSkeleton } from "@/components/states/loading-skeleton";
 import { Pagination } from "@/components/pagination";
 import { fetchMe, ME_QUERY_KEY } from "@/components/app-shell/shell-user";
 import { formatNumber } from "@/lib/format";
+import { ProductArchiveDialog } from "./product-archive-dialog";
 import { ProductFormDialog } from "./product-form-dialog";
 import { fetchProductsPage, PAGE_SIZE, PRODUCTS_QUERY_KEY, type Product } from "./product-api";
 
@@ -29,10 +30,12 @@ type FormTarget = Product | null | undefined;
 export function ProductList() {
   const [requestedPage, setPage] = useState(1);
   const [target, setTarget] = useState<FormTarget>(undefined);
+  const [archiveTarget, setArchiveTarget] = useState<Product | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   const me = useQuery({ queryKey: ME_QUERY_KEY, queryFn: fetchMe, retry: false });
   const list = useQuery({
-    queryKey: [...PRODUCTS_QUERY_KEY, requestedPage],
-    queryFn: () => fetchProductsPage(requestedPage),
+    queryKey: [...PRODUCTS_QUERY_KEY, requestedPage, showArchived],
+    queryFn: () => fetchProductsPage(requestedPage, showArchived),
     placeholderData: keepPreviousData,
     retry: false,
   });
@@ -57,6 +60,20 @@ export function ProductList() {
         {addButton}
       </div>
 
+      {canManage && (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={showArchived}
+            onChange={(event) => {
+              setShowArchived(event.target.checked);
+              setPage(1);
+            }}
+          />
+          Tampilkan yang diarsipkan
+        </label>
+      )}
+
       {list.isPending && <LoadingSkeleton />}
       {list.isError && <ErrorBanner onRetry={() => void list.refetch()} />}
       {list.data && list.data.total === 0 && (
@@ -75,7 +92,8 @@ export function ProductList() {
                   <TableHead>Nama produk</TableHead>
                   <TableHead>Satuan</TableHead>
                   <TableHead className="text-right">Batas minimum</TableHead>
-                  {canManage && <TableHead className="w-32 text-right">Aksi</TableHead>}
+                  {canManage && <TableHead>Status</TableHead>}
+                  {canManage && <TableHead className="w-48 text-right">Aksi</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -86,15 +104,33 @@ export function ProductList() {
                     <TableCell>{product.unit}</TableCell>
                     <TableCell className="text-right">{formatNumber(product.minStock)}</TableCell>
                     {canManage && (
-                      <TableCell className="text-right whitespace-nowrap">
+                      <TableCell>{product.archivedAt ? "Diarsipkan" : "Aktif"}</TableCell>
+                    )}
+                    {canManage && (
+                      <TableCell className="space-x-2 text-right whitespace-nowrap">
+                        {!product.archivedAt && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            aria-label={`Ubah ${product.name}`}
+                            onClick={() => setTarget(product)}
+                          >
+                            <Pencil aria-hidden />
+                            Ubah
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           size="sm"
-                          aria-label={`Ubah ${product.name}`}
-                          onClick={() => setTarget(product)}
+                          aria-label={`${product.archivedAt ? "Pulihkan" : "Arsipkan"} ${product.name}`}
+                          onClick={() => setArchiveTarget(product)}
                         >
-                          <Pencil aria-hidden />
-                          Ubah
+                          {product.archivedAt ? (
+                            <ArchiveRestore aria-hidden />
+                          ) : (
+                            <Archive aria-hidden />
+                          )}
+                          {product.archivedAt ? "Pulihkan" : "Arsipkan"}
                         </Button>
                       </TableCell>
                     )}
@@ -113,6 +149,9 @@ export function ProductList() {
         </>
       )}
 
+      {canManage && (
+        <ProductArchiveDialog product={archiveTarget} onClose={() => setArchiveTarget(null)} />
+      )}
       {canManage && (
         <ProductFormDialog
           // `target ?? null` keeps the last edited product's values out of the create form.
