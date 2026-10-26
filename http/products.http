@@ -1,0 +1,47 @@
+# Log in first with http/auth.http (Owner), then run these in the same VS Code session.
+# Every write needs an Origin header equal to the server's own scheme and host.
+
+### List products (page, pageSize, includeArchived for the Owner)
+# Expect 200 { items, total, page, pageSize }
+GET http://localhost:3000/api/products?page=1&pageSize=20
+
+### Create a product (Owner only)
+# Expect 201 with sku "BRS-5KG" (spaces removed, uppercase) and minStock 0
+POST http://localhost:3000/api/products
+Origin: http://localhost:3000
+Content-Type: application/json
+
+{ "sku": "brs 5kg", "name": "Beras 5 kg", "unit": "pcs" }
+
+### Duplicate SKU
+# Expect 409 { "code": "CONFLICT", "message": "SKU sudah dipakai." }
+POST http://localhost:3000/api/products
+Origin: http://localhost:3000
+Content-Type: application/json
+
+{ "sku": "BRS-5KG", "name": "Duplikat", "unit": "pcs" }
+
+### Invalid unit
+# Expect 400 VALIDATION_ERROR
+POST http://localhost:3000/api/products
+Origin: http://localhost:3000
+Content-Type: application/json
+
+{ "sku": "X1", "name": "x", "unit": "kg", "minStock": -1 }
+
+### Get one product (replace the id)
+GET http://localhost:3000/api/products/00000000-0000-7000-8000-000000000000
+
+### Edit a product (Owner only)
+PATCH http://localhost:3000/api/products/00000000-0000-7000-8000-000000000000
+Origin: http://localhost:3000
+Content-Type: application/json
+
+{ "name": "Beras 10 kg", "minStock": 10 }
+
+### Archive a product (archived: false restores it)
+PATCH http://localhost:3000/api/products/00000000-0000-7000-8000-000000000000
+Origin: http://localhost:3000
+Content-Type: application/json
+
+{ "archived": true }
