@@ -114,6 +114,9 @@ access. Only the last layer talks to Prisma.
     POST, PUT, PATCH or DELETE route must pass `body: schema` or `body: "none"`, otherwise it fails closed.
 15. The session is read only through `getCurrentUser` (`src/modules/platform/current-user.ts`). No handler
     parses the session cookie itself.
+16. A new API route is registered in the same story: a tenant endpoint in `src/test/tenant-isolation/registry.ts`
+    (or `EXEMPT_ROUTES` with a reason), a non-tenant route in `PUBLIC_ROUTES`. CI fails if one is missing
+    (`inventory.test.ts`; how-to in `src/test/README.md`).
 
 ## Commands
 

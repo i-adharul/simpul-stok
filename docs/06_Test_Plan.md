@@ -30,3 +30,27 @@ Supporting practices: Docker Compose for the local Postgres, a separate database
 | Item           | Why it matters                    | Decision                                                                                                                        |
 | -------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | Required tests | Protect the product's main claims | At minimum for BL02, BL03, BL13, BL14, BL15, BL20, BL21, BL22, BL23; every other logic item has tests according to its criteria |
+
+## Registering a new endpoint (tenant isolation)
+
+Every route under `src/app/api` must be accounted for in the cross-tenant harness (`src/test/tenant-isolation/`). `inventory.test.ts` fails CI when a `route.ts` is in none of three places, or in more than one:
+
+| Where                              | For                                                       | What it needs                                       |
+| ---------------------------------- | --------------------------------------------------------- | --------------------------------------------------- |
+| `TENANT_ENDPOINTS` (`registry.ts`) | A tenant route (uses `withTenantRoute`). The normal case. | One entry per HTTP method, see below                |
+| `EXEMPT_ROUTES` (`exemptions.ts`)  | A tenant route that cannot be tested this way.            | A written reason                                    |
+| `PUBLIC_ROUTES` (`exemptions.ts`)  | A route that is not tenant at all (login, health, `/me`). | A written reason; it must not use `withTenantRoute` |
+
+A registry entry has a `kind`: `item` (an endpoint addressed by one row's ID), `list`, or `create`. Together with the permission (`action`, from `can.ts`) and the role list derived from it (`allowedRoles: rolesFor(action)`), a way to create a row for either organization (`createRow`), and a way to read it back (`readRow`), that is all the harness needs. For each entry it then runs, from organization A's session against organization B's data:
+
+| Check                                    | Expectation                                                                                  |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------- |
+| No session                               | 401                                                                                          |
+| Platform admin                           | 403                                                                                          |
+| A role that may not perform the action   | 403, checked before the existence of the row, even for B's ID                                |
+| Read, update, delete with B's ID         | 404, byte-identical to the response for an ID that does not exist; B's row is left untouched |
+| List                                     | Contains none of B's rows (and contains A's own)                                             |
+| Cursor holding B's ID (`supportsCursor`) | Returns none of B's rows                                                                     |
+| `organizationId` in the body or query    | Ignored or rejected (400); never creates or moves a row in B                                 |
+
+The harness is proven by `harness.selftest.test.ts`: a correctly scoped test-only route passes every check, and routes built with one deliberate flaw each (plain client instead of the tenant client, authorization after the lookup, trusting `organizationId` from the body, and so on) fail the matching check with the expected message.
