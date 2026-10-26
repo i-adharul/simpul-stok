@@ -28,6 +28,18 @@ REST through Next.js Route Handlers is the main path between the UI and the serv
 
 Endpoints that change stock (`receive`, `adjust`, `transfers`, `imports/:id/commit`) accept an `Idempotency-Key` header (BL14). The history (`GET /api/stock/movements`) uses cursor pagination (BL16); other list endpoints use `page` and `pageSize` and return a total. Archiving and restoring a warehouse or product goes through `PATCH` (`archived: true` or `false`). Every write is also checked by BL23.
 
+## Idempotency (BL14)
+
+**Request header `Idempotency-Key`.** Required on every write that changes stock (`POST /api/stock/receive`, `POST /api/stock/adjust`, `POST /api/stock/transfers`, `POST /api/imports/:id/commit`). The value must be a UUID (the client creates a new one each time a form is opened). A missing or malformed header returns `400 { "code": "VALIDATION_ERROR", "message": "...", "details": [{ "source": "header", "path": "Idempotency-Key", "message": "..." }] }`. The check runs after authentication and the role check and before the body is validated. Keys are compared in lower case.
+
+**Scope.** A key is unique per organization and endpoint. The same key on another endpoint, or in another organization, is a different key.
+
+**Replay.** If a request with the same key already succeeded, the server does not act again. It answers with the same status and body shape as the first response, built from the stored resource, and adds the response header `Idempotency-Replayed: true`. The body of the repeated request is not compared. Two requests with the same key at the same time produce one effect; one of them is answered as a replay.
+
+**A replay is authorized again.** If the caller may not see the stored resource (for example a Warehouse Admin of another warehouse), the answer is `404 NOT_FOUND`, identical to a resource that does not exist. A caller who may not perform the action gets `403` even when the key exists.
+
+**Failures.** A request that fails (4xx or 5xx) stores no key, so the same key can be sent again. Keys older than 24 hours are removed by the daily cron; after that the same key counts as new.
+
 `POST /api/billing/invoices` determines `kind` from the organization's condition (INITIAL for a trial, PLAN_CHANGE if subscribed and the plan differs, RENEWAL if the plan is the same) and accepts `planId` (BL21). `POST /api/billing/invoices/:id/cancel` is only for PENDING PLAN_CHANGE invoices and sets them to EXPIRED. `GET /api/billing` returns the effective limits (BL20).
 
 ## Auth endpoints: request and response

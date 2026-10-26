@@ -43,14 +43,16 @@ Every route under `src/app/api` must be accounted for in the cross-tenant harnes
 
 A registry entry has a `kind`: `item` (an endpoint addressed by one row's ID), `list`, or `create`. Together with the permission (`action`, from `can.ts`) and the role list derived from it (`allowedRoles: rolesFor(action)`), a way to create a row for either organization (`createRow`), and a way to read it back (`readRow`), that is all the harness needs. For each entry it then runs, from organization A's session against organization B's data:
 
-| Check                                    | Expectation                                                                                  |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------- |
-| No session                               | 401                                                                                          |
-| Platform admin                           | 403                                                                                          |
-| A role that may not perform the action   | 403, checked before the existence of the row, even for B's ID                                |
-| Read, update, delete with B's ID         | 404, byte-identical to the response for an ID that does not exist; B's row is left untouched |
-| List                                     | Contains none of B's rows (and contains A's own)                                             |
-| Cursor holding B's ID (`supportsCursor`) | Returns none of B's rows                                                                     |
-| `organizationId` in the body or query    | Ignored or rejected (400); never creates or moves a row in B                                 |
+| Check                                                       | Expectation                                                                                                                                         |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No session                                                  | 401                                                                                                                                                 |
+| Platform admin                                              | 403                                                                                                                                                 |
+| A role that may not perform the action                      | 403, checked before the existence of the row, even for B's ID                                                                                       |
+| Read, update, delete with B's ID                            | 404, byte-identical to the response for an ID that does not exist; B's row is left untouched                                                        |
+| List                                                        | Contains none of B's rows (and contains A's own)                                                                                                    |
+| Cursor holding B's ID (`supportsCursor`)                    | Returns none of B's rows                                                                                                                            |
+| `organizationId` in the body or query                       | Ignored or rejected (400); never creates or moves a row in B                                                                                        |
+| Missing or malformed `Idempotency-Key` (`idempotent: true`) | 400 `VALIDATION_ERROR`; no row is created                                                                                                           |
+| Same valid request twice with one key (`idempotent: true`)  | Same 2xx status and identical body; only the second carries `Idempotency-Replayed: true`; exactly one row created (or the row is not changed again) |
 
-The harness is proven by `harness.selftest.test.ts`: a correctly scoped test-only route passes every check, and routes built with one deliberate flaw each (plain client instead of the tenant client, authorization after the lookup, trusting `organizationId` from the body, and so on) fail the matching check with the expected message.
+The harness is proven by `harness.selftest.test.ts`: a correctly scoped test-only route passes every check, and routes built with one deliberate flaw each (plain client instead of the tenant client, authorization after the lookup, trusting `organizationId` from the body, and so on) fail the matching check with the expected message. Stock writes get two more flaws: a route that ignores the `Idempotency-Key` header, and a route that declares `idempotent: true` but never calls `runIdempotent`.

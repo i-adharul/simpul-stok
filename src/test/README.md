@@ -53,6 +53,14 @@ and `kind: "create"` (`path`, `body`, `countRows`) for a POST that creates a row
 Unique columns (sku, code) in `createRow` can use `t.unique("x")`; warehouse codes and SKUs must be uppercase. 2. A route that cannot be tested this way goes in `EXEMPT_ROUTES` with a reason. A route that is not a tenant
 route at all goes in `PUBLIC_ROUTES` (it must not use `withTenantRoute`). 3. Run `pnpm test`. `inventory.test.ts` names the route that is missing.
 
+Stock write endpoints (receive, adjust, transfer, import commit) also set `idempotent: true` on the entry. The
+harness then sends a fresh `Idempotency-Key` with every request and adds two checks: "write without a valid
+Idempotency-Key gets 400" and "same key twice gives one effect and the same body" (same status, identical
+body, `Idempotency-Replayed: true` only on the second response, one row created or the row not changed
+again). A route that declares `idempotent: true` but never calls `runIdempotent` fails the second check. `inventory.test.ts` requires it for routes starting with `stock/`, `transfers` or
+`imports`; a real exception goes in `IDEMPOTENCY_EXEMPT` (`exemptions.ts`) with a reason. `idempotency/test-routes.ts`
+holds a test-only stock write used to prove the wrapper (`modules/platform/idempotency.test.ts`).
+
 Notes:
 
 - **Organization-level actions** (`warehouse.read`, `product.read`, `warehouse.manage`, `product.manage`,
