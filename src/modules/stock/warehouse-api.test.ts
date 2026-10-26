@@ -114,6 +114,32 @@ describe("GET /api/warehouses", () => {
     expect(json.items).toHaveLength(1);
   });
 
+  it("returns an empty items array for a page beyond the last page, with the real total", async () => {
+    for (const path of ["/api/warehouses?page=99", "/api/warehouses?page=3&pageSize=1"]) {
+      const json = await (await call(listRoute.GET, "OWNER", { method: "GET", path })).json();
+      expect(json.items, path).toEqual([]);
+      expect(json.total, path).toBe(2);
+    }
+  });
+
+  it("returns 400 for page 0, a negative page, a non-number and a page size of 0 or above 100", async () => {
+    for (const q of ["page=0", "page=-1", "page=abc", "pageSize=0", "pageSize=101"]) {
+      const res = await call(listRoute.GET, "OWNER", {
+        method: "GET",
+        path: `/api/warehouses?${q}`,
+      });
+      expect(res.status, q).toBe(400);
+    }
+  });
+
+  it("accepts the largest page size, 100", async () => {
+    const res = await call(listRoute.GET, "OWNER", {
+      method: "GET",
+      path: "/api/warehouses?pageSize=100",
+    });
+    expect(res.status).toBe(200);
+  });
+
   it("shows a viewer only the assigned warehouse", async () => {
     const res = await call(listRoute.GET, "VIEWER", { method: "GET", path: "/api/warehouses" });
     const json = await res.json();
