@@ -6,15 +6,19 @@ type Props = {
   page: number;
   pageSize: number;
   total: number;
+  /** What is counted, shown after the total (for example "gudang"). */
+  noun: string;
   onPageChange: (page: number) => void;
 };
 
 /** Numbered pages with the total (functional spec, Design decisions: Pagination). */
-export function Pagination({ page, pageSize, total, onPageChange }: Props) {
+export function Pagination({ page, pageSize, total, noun, onPageChange }: Props) {
   const last = pageCount(total, pageSize);
   return (
     <nav aria-label="Halaman" className="flex flex-wrap items-center justify-between gap-3">
-      <p className="text-sm text-muted-foreground">Total {formatNumber(total)} gudang</p>
+      <p className="text-sm text-muted-foreground">
+        Total {formatNumber(total)} {noun}
+      </p>
       <div className="flex items-center gap-1">
         <Button
           variant="outline"

@@ -16,8 +16,8 @@ import { EmptyState } from "@/components/states/empty-state";
 import { ErrorBanner } from "@/components/states/error-banner";
 import { LoadingSkeleton } from "@/components/states/loading-skeleton";
 import { fetchMe, ME_QUERY_KEY } from "@/components/app-shell/shell-user";
+import { Pagination } from "@/components/pagination";
 import { pageCount } from "@/lib/pagination";
-import { Pagination } from "./pagination";
 import { WarehouseArchiveDialog } from "./warehouse-archive-dialog";
 import { WarehouseFormDialog } from "./warehouse-form-dialog";
 import { fetchWarehouses, PAGE_SIZE, WAREHOUSES_QUERY_KEY, type Warehouse } from "./warehouse-api";
@@ -153,6 +153,7 @@ export function WarehouseList() {
             page={list.data.page}
             pageSize={PAGE_SIZE}
             total={list.data.total}
+            noun="gudang"
             onPageChange={setPage}
           />
         </>
