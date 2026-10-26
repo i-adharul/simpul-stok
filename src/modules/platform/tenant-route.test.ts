@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import { ApiError, ERROR_CODES } from "../../lib/api-error";
 import { env } from "../../lib/env";
 import type { PrismaClient } from "../../generated/prisma/client";
 import { assertTestDatabaseUrl, createTestPrisma } from "../../test/test-database";
@@ -171,6 +172,76 @@ describe("withTenantRoute", () => {
     it("keeps a Cache-Control the handler set itself", async () => {
       const response = await own()(await post({}, "OWNER"));
       expect(response.headers.get("cache-control")).toBe("max-age=60");
+    });
+  });
+
+  describe("response wrapper", () => {
+    const send = async () => await post({}, "OWNER");
+
+    it("keeps status and body of a 404 and a 500, and adds no-store", async () => {
+      const missing = withTenantRoute(
+        async () => {
+          throw new ApiError(404, ERROR_CODES.NOT_FOUND, "Data tidak ditemukan.");
+        },
+        { body: "none" },
+      );
+      const notFound = await missing(await send());
+      expect(notFound.status).toBe(404);
+      expect(await notFound.json()).toMatchObject({
+        code: "NOT_FOUND",
+        message: "Data tidak ditemukan.",
+      });
+      expect(notFound.headers.get("cache-control")).toBe("no-store");
+      expect(notFound.headers.get("x-request-id")).toBeTruthy();
+
+      const broken = withTenantRoute(
+        async () => {
+          throw new Error("boom");
+        },
+        { body: "none" },
+      );
+      const failed = await broken(await send());
+      expect(failed.status).toBe(500);
+      const text = await failed.text();
+      expect(JSON.parse(text)).toMatchObject({ code: "INTERNAL_ERROR" });
+      expect(text).not.toContain("boom");
+      expect(failed.headers.get("cache-control")).toBe("no-store");
+      expect(failed.headers.get("x-request-id")).toBeTruthy();
+    });
+
+    it("keeps x-request-id, every Set-Cookie and a handler header such as Idempotency-Replayed", async () => {
+      const route = withTenantRoute(
+        async () => {
+          const response = Response.json({ ok: true }, { status: 201 });
+          response.headers.append("Set-Cookie", "a=1; Path=/; HttpOnly");
+          response.headers.append("Set-Cookie", "b=2; Path=/; HttpOnly");
+          response.headers.set("Idempotency-Replayed", "true");
+          return response;
+        },
+        { body: "none" },
+      );
+      const response = await route(await send());
+      expect(response.status).toBe(201);
+      expect(await response.json()).toEqual({ ok: true });
+      expect(response.headers.getSetCookie()).toEqual([
+        "a=1; Path=/; HttpOnly",
+        "b=2; Path=/; HttpOnly",
+      ]);
+      expect(response.headers.get("idempotency-replayed")).toBe("true");
+      expect(response.headers.get("x-request-id")).toBeTruthy();
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    });
+
+    it("does not overwrite a Cache-Control the handler set, on an error response too", async () => {
+      const route = withTenantRoute(
+        async () =>
+          new Response("gone", { status: 404, headers: { "Cache-Control": "private, max-age=5" } }),
+        { body: "none" },
+      );
+      const response = await route(await send());
+      expect(response.status).toBe(404);
+      expect(await response.text()).toBe("gone");
+      expect(response.headers.get("cache-control")).toBe("private, max-age=5");
     });
   });
 

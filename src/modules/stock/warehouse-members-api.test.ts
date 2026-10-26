@@ -202,6 +202,24 @@ describe("PUT /api/warehouses/:id/members", () => {
   });
 });
 
+describe("PUT /api/warehouses/:id/members under concurrency", () => {
+  it("serializes parallel replacements: no 500, one winning set, no duplicate rows", async () => {
+    const pool = [t.a.users.VIEWER, t.a.users.WAREHOUSE_ADMIN];
+    for (let i = 0; i < 3; i++) pool.push(await extraUser(t.a.organizationId, "VIEWER"));
+    // Ten different sets drawn from the same five users, so replacements overlap on the unique key.
+    const sets = Array.from({ length: 10 }, (_, i) => pool.filter((_, j) => ((i + 1) >> j) & 1));
+
+    const responses = await Promise.all(
+      sets.map((userIds) => call("PUT", "OWNER", t.a.warehouseId, { userIds })),
+    );
+
+    expect(responses.map((r) => r.status).filter((s) => s >= 500)).toEqual([]);
+    const final = await assignedTo(t.a.warehouseId);
+    expect(sets.map((set) => [...set].sort())).toContainEqual(final);
+    expect(new Set(final).size).toBe(final.length);
+  });
+});
+
 describe("replaceWarehouseMembers (service)", () => {
   it("gives a foreign user id the same 404 as a missing one and leaves every assignment untouched", async () => {
     const db = createTenantClient(prisma, {
