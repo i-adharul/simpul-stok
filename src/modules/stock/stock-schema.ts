@@ -18,3 +18,35 @@ export const receiveBody = z.strictObject({
   note: note.optional(),
 });
 export type ReceiveBody = z.infer<typeof receiveBody>;
+
+// BL12/BL15. SET: value is the new quantity (0 to 1,000,000). DELTA: value is a non-zero whole number
+// whose absolute size is at most 1,000,000. The result (new quantity) is checked in the service, under
+// the warehouse lock, because it depends on the current stock.
+export const MAX_ADJUST_QUANTITY = 1_000_000;
+export const ADJUST_REASONS = ["STOCK_OPNAME", "DAMAGED", "LOST", "CORRECTION"] as const;
+
+const adjustBase = {
+  warehouseId: z.uuid(),
+  productId: z.uuid(),
+  reason: z.enum(ADJUST_REASONS),
+  note: note.optional(),
+};
+
+export const adjustBody = z.discriminatedUnion("mode", [
+  z.strictObject({
+    ...adjustBase,
+    mode: z.literal("SET"),
+    value: z.number().int().min(0).max(MAX_ADJUST_QUANTITY),
+  }),
+  z.strictObject({
+    ...adjustBase,
+    mode: z.literal("DELTA"),
+    value: z
+      .number()
+      .int()
+      .min(-MAX_ADJUST_QUANTITY)
+      .max(MAX_ADJUST_QUANTITY)
+      .refine((v) => v !== 0, "Selisih tidak boleh 0."),
+  }),
+]);
+export type AdjustBody = z.infer<typeof adjustBody>;
