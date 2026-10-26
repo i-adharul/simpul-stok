@@ -20,6 +20,23 @@ export const ACTIONS = [
 ] as const;
 
 export type Action = (typeof ACTIONS)[number];
+
+// Actions that need no warehouse: decided by the role alone, so withTenantRoute can check them before
+// the input is read. The warehouse-level ones (stock.*, history.read) need a warehouseId, which only
+// the handler knows, so the handler calls authorize() for them.
+export const ORGANIZATION_ACTIONS = [
+  "warehouse.read",
+  "product.read",
+  "warehouse.manage",
+  "product.manage",
+  "member.manage",
+  "subscription.manage",
+] as const satisfies readonly Action[];
+export type OrganizationAction = (typeof ORGANIZATION_ACTIONS)[number];
+
+export function isOrganizationAction(action: Action): action is OrganizationAction {
+  return (ORGANIZATION_ACTIONS as readonly Action[]).includes(action);
+}
 export type Resource = { warehouseId?: string };
 
 type Role = RequestContext["role"];
