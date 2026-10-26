@@ -18,9 +18,14 @@ const address = z
 
 export const createWarehouseBody = z.strictObject({ code, name, address: address.optional() });
 
-// Archiving goes through PATCH too, but arrives in E3-03; until then `archived` is rejected as unknown.
+// Archiving (true) and restoring (false) go through PATCH too (docs/04).
 export const updateWarehouseBody = z
-  .strictObject({ code: code.optional(), name: name.optional(), address: address.optional() })
+  .strictObject({
+    code: code.optional(),
+    name: name.optional(),
+    address: address.optional(),
+    archived: z.boolean().optional(),
+  })
   .refine((body) => Object.keys(body).length > 0, { message: "At least one field is required." });
 
 export const warehouseIdParams = z.object({ id: z.string() });

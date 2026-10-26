@@ -1,3 +1,4 @@
+import { ApiError, ERROR_CODES } from "../../lib/api-error";
 import { conflictOnUnique } from "../../lib/unique-violation";
 import { authorize } from "../platform/can";
 import { findOwnedOrThrow } from "../platform/ownership";
@@ -10,6 +11,7 @@ import type {
 } from "./warehouse-schema";
 
 const DUPLICATE_CODE = "Kode gudang sudah dipakai.";
+const HAS_STOCK = "Gudang masih memiliki stok. Kosongkan stok sebelum mengarsipkan.";
 
 // BL08 list. Owner: every active warehouse (archived ones only on request, so E3-03 can restore).
 // Warehouse Admin and Viewer: only the assigned ones; ctx.warehouseIds never holds an archived one.
@@ -36,11 +38,13 @@ export async function listWarehouses(
   return { items, total, page: q.page, pageSize: q.pageSize };
 }
 
-// 404 first (other organization, missing or archived look the same), then 403 for a warehouse of
-// this organization that the user is not assigned to.
+// 404 first (other organization or missing look the same), then 403 for a warehouse of this
+// organization that the user is not assigned to. An archived warehouse is visible to the Owner only,
+// so it can be restored; ctx.warehouseIds never holds it, hence the Owner skips the per-warehouse check.
 export async function getWarehouse(db: TenantClient, ctx: RequestContext, id: string) {
-  const warehouse = await findOwnedOrThrow(db, "warehouse", id);
-  authorize(ctx, "warehouse.read", { warehouseId: warehouse.id });
+  const isOwner = ctx.role === "OWNER";
+  const warehouse = await findOwnedOrThrow(db, "warehouse", id, { includeArchived: isOwner });
+  authorize(ctx, "warehouse.read", isOwner ? {} : { warehouseId: warehouse.id });
   return warehouse;
 }
 
@@ -61,7 +65,19 @@ export function createWarehouse(db: TenantClient, ctx: RequestContext, body: Cre
   );
 }
 
+// BL08: archive only when every stock row is 0. Restoring needs the archived row, so it is looked up
+// through the tenant client with includeArchived (never from ctx.warehouseIds). The plan-limit check
+// on restore (P03) arrives with E8.
 export async function updateWarehouse(db: TenantClient, id: string, body: UpdateWarehouseBody) {
-  await findOwnedOrThrow(db, "warehouse", id);
-  return conflictOnUnique(() => db.warehouse.update({ where: { id }, data: body }), DUPLICATE_CODE);
+  const { archived, ...fields } = body;
+  await findOwnedOrThrow(db, "warehouse", id, { includeArchived: archived === false });
+  if (archived === true) await assertNoStock(db, id);
+  const data =
+    archived === undefined ? fields : { ...fields, archivedAt: archived ? new Date() : null };
+  return conflictOnUnique(() => db.warehouse.update({ where: { id }, data }), DUPLICATE_CODE);
+}
+
+async function assertNoStock(db: TenantClient, warehouseId: string) {
+  const withStock = await db.stockLevel.count({ where: { warehouseId, quantity: { gt: 0 } } });
+  if (withStock > 0) throw new ApiError(409, ERROR_CODES.CONFLICT, HAS_STOCK);
 }

@@ -37,6 +37,15 @@ describe("can: Owner", () => {
   });
 });
 
+describe("can: warehouse.read for one warehouse", () => {
+  it("needs the warehouse to be in ctx.warehouseIds (so archived is denied here)", () => {
+    const viewer = ctxOf("VIEWER", [A]);
+    expect(can(viewer, "warehouse.read", { warehouseId: A })).toBe(true);
+    expect(can(viewer, "warehouse.read", { warehouseId: B })).toBe(false);
+    expect(can(viewer, "warehouse.read")).toBe(true);
+  });
+});
+
 describe("can: Warehouse Admin", () => {
   const admin = ctxOf("WAREHOUSE_ADMIN");
   it("may receive, adjust, transfer and read in the assigned warehouse", () => {
