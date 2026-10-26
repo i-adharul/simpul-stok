@@ -160,6 +160,45 @@ export async function listMovements(db: TenantClient, ctx: RequestContext, q: Li
   };
 }
 
+// P13 detail. Same visibility as the list: a movement outside ctx.warehouseIds answers 404, the same as
+// a missing id or one of another organization (rule 2), so the answer never reveals that it exists.
+// Names come from separate tenant-client reads (no relation select), like S06 does for its members.
+export async function getMovement(db: TenantClient, ctx: RequestContext, id: string) {
+  if (!UUID.test(id)) throw notFoundError();
+  const row = await db.stockMovement.findFirst({ where: { id } });
+  if (!row || !ctx.warehouseIds.includes(row.warehouseId)) throw notFoundError();
+  const [warehouse, product, creator, transfer] = await Promise.all([
+    db.warehouse.findFirst({ where: { id: row.warehouseId } }),
+    db.product.findFirst({ where: { id: row.productId } }),
+    db.user.findFirst({ where: { id: row.createdById } }),
+    row.transferId ? db.stockTransfer.findFirst({ where: { id: row.transferId } }) : null,
+  ]);
+  if (!warehouse || !product) throw notFoundError();
+  const transferSides = transfer
+    ? await db.warehouse.findMany({
+        where: { id: { in: [transfer.fromWarehouseId, transfer.toWarehouseId] } },
+      })
+    : [];
+  const nameOf = (wid: string) => transferSides.find((w) => w.id === wid)?.name ?? null;
+  return {
+    ...movementListItem(row),
+    warehouse: { id: warehouse.id, code: warehouse.code, name: warehouse.name },
+    product: { id: product.id, sku: product.sku, name: product.name, unit: product.unit },
+    // id, name and role only, never the email (as S06).
+    createdBy: creator ? { id: creator.id, name: creator.name, role: creator.role } : null,
+    transfer: transfer
+      ? {
+          id: transfer.id,
+          code: transfer.code,
+          fromWarehouse: { id: transfer.fromWarehouseId, name: nameOf(transfer.fromWarehouseId) },
+          toWarehouse: { id: transfer.toWarehouseId, name: nameOf(transfer.toWarehouseId) },
+        }
+      : null,
+  };
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const movementListItem = (row: Movement) => ({
   id: row.id,
   warehouseId: row.warehouseId,
