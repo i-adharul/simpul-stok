@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
 import pg from "pg";
 import { env } from "../lib/env";
-import { assertTestDatabaseUrl } from "./test-database";
+import type { TestProject } from "vitest/node";
+import { assertSameTestDatabase, assertTestDatabaseUrl } from "./test-database";
 
 // Vitest 5.0.5 crashes while printing the stack of an error thrown from globalSetup and hides the
 // message, so every failure is printed with console.error first and then thrown.
@@ -27,8 +28,16 @@ function redact(output: string): string {
 }
 
 // Runs once before all tests: prove the test database is reachable, then bring it up to date.
-export default async function setup() {
+export default async function setup(project: TestProject) {
   const testDatabaseUrl = checkDatabaseUrl(env.TEST_DATABASE_URL);
+
+  // What the test workers will see as DATABASE_URL (vitest.config.mts `test.env`). Checked here, in
+  // the main process, so a mismatch stops the whole run before any test touches a database.
+  try {
+    assertSameTestDatabase(project.config.env.DATABASE_URL, testDatabaseUrl);
+  } catch (error) {
+    fail((error as Error).message, error);
+  }
 
   const client = new pg.Client({ connectionString: testDatabaseUrl });
   try {
