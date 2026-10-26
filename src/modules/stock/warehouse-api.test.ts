@@ -146,6 +146,28 @@ describe("GET /api/warehouses/:id", () => {
     expect((await get("VIEWER", t.a.warehouseId)).status).toBe(200);
   });
 
+  it("lists the assigned users with id, name and role only, never an email", async () => {
+    const res = await get("VIEWER", t.a.warehouseId);
+    const { assignedUsers } = await res.json();
+    expect(assignedUsers.map((u: { id: string }) => u.id).sort()).toEqual(
+      [t.a.users.WAREHOUSE_ADMIN, t.a.users.VIEWER].sort(),
+    );
+    for (const user of assignedUsers) {
+      expect(Object.keys(user).sort()).toEqual(["id", "name", "role"]);
+    }
+    expect(JSON.stringify(assignedUsers)).not.toContain("@");
+  });
+
+  it("leaves out an inactive user and returns an empty list for a warehouse without assignments", async () => {
+    await prisma.user.update({ where: { id: t.a.users.VIEWER }, data: { isActive: false } });
+    const { assignedUsers } = await (await get("OWNER", t.a.warehouseId)).json();
+    expect(assignedUsers.map((u: { id: string }) => u.id)).toEqual([t.a.users.WAREHOUSE_ADMIN]);
+    const other = await prisma.warehouse.findFirstOrThrow({
+      where: { organizationId: t.a.organizationId, code: "W2" },
+    });
+    expect((await (await get("OWNER", other.id)).json()).assignedUsers).toEqual([]);
+  });
+
   it("returns 403 for a warehouse of the organization that is not assigned to the viewer", async () => {
     const other = await prisma.warehouse.findFirstOrThrow({
       where: { organizationId: t.a.organizationId, code: "W2" },

@@ -45,7 +45,22 @@ export async function getWarehouse(db: TenantClient, ctx: RequestContext, id: st
   const isOwner = ctx.role === "OWNER";
   const warehouse = await findOwnedOrThrow(db, "warehouse", id, { includeArchived: isOwner });
   authorize(ctx, "warehouse.read", isOwner ? {} : { warehouseId: warehouse.id });
-  return warehouse;
+  return { ...warehouse, assignedUsers: await readAssignedUsers(db, warehouse.id) };
+}
+
+// S06: id, name and role only (no email). Two tenant-client reads instead of a relation select, the
+// same way the P06 candidates are read. Inactive users are left out: they cannot act on the warehouse.
+async function readAssignedUsers(db: TenantClient, warehouseId: string) {
+  const rows = await db.userWarehouse.findMany({
+    where: { warehouseId },
+    select: { userId: true },
+  });
+  if (rows.length === 0) return [];
+  return db.user.findMany({
+    where: { id: { in: rows.map((row) => row.userId) }, isActive: true },
+    select: { id: true, name: true, role: true },
+    orderBy: [{ name: "asc" }, { id: "asc" }],
+  });
 }
 
 // Plan limit is not enforced yet (E8).

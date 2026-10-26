@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Archive, ArchiveRestore, Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -109,7 +110,11 @@ export function WarehouseList() {
                     <TableCell className="font-mono text-xs font-semibold">
                       {warehouse.code}
                     </TableCell>
-                    <TableCell className="font-medium">{warehouse.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <Link href={`/warehouses/${warehouse.id}`} className="hover:underline">
+                        {warehouse.name}
+                      </Link>
+                    </TableCell>
                     <TableCell className="text-muted-foreground">
                       {warehouse.address ?? "-"}
                     </TableCell>
