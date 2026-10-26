@@ -109,6 +109,8 @@ access. Only the last layer talks to Prisma.
 6. Every stock change runs inside one `prisma.$transaction`. Decrements use a conditional
    atomic update (`updateMany` with `quantity >= amount`). Multi-row updates are ordered by
    `(warehouseId, productId)` to avoid deadlocks. The database `CHECK (quantity >= 0)` is the last safety net.
+   Every stock write takes `lockWarehouse(tx, warehouseId)` first (ADR 0013); `stock-write-lock.test.ts` fails
+   a file in `modules/stock/` that writes stock without it.
 7. Mutations that can be retried carry an `Idempotency-Key`, enforced by a unique constraint.
 8. Stock movement rows are immutable. Business data is archived, not deleted.
 9. Secrets live only in environment variables. Never commit `.env*` except `.env.example`.
