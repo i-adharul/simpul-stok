@@ -16,8 +16,17 @@ export type ProductPage = { items: Product[]; total: number; page: number; pageS
 export const PRODUCTS_QUERY_KEY = ["products"] as const;
 export const PAGE_SIZE = 20;
 
-export function fetchProducts(page: number): Promise<ProductPage> {
-  return apiFetch<ProductPage>(`/api/products?page=${page}&pageSize=${PAGE_SIZE}`);
+export function fetchProducts(page: number, includeArchived = false): Promise<ProductPage> {
+  const archived = includeArchived ? "&includeArchived=true" : "";
+  return apiFetch<ProductPage>(`/api/products?page=${page}&pageSize=${PAGE_SIZE}${archived}`);
+}
+
+// P03. Archiving never blocks on stock (BL09): remaining stock can still be adjusted to zero.
+export function setProductArchived(id: string, archived: boolean): Promise<Product> {
+  return apiFetch<Product>(`/api/products/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ archived }),
+  });
 }
 
 // Always sends all four fields: an edit never sends an empty body, which the API would refuse.
@@ -30,8 +39,11 @@ export function saveProduct(id: string | null, values: ProductFormValues): Promi
 
 // If the requested page is past the end (the last page emptied), load the last page instead; the
 // response carries the page actually returned, which the list shows.
-export async function fetchProductsPage(page: number): Promise<ProductPage> {
-  const result = await fetchProducts(page);
+export async function fetchProductsPage(
+  page: number,
+  includeArchived = false,
+): Promise<ProductPage> {
+  const result = await fetchProducts(page, includeArchived);
   const last = clampPage(page, result.total, PAGE_SIZE);
-  return last !== page ? fetchProducts(last) : result;
+  return last !== page ? fetchProducts(last, includeArchived) : result;
 }

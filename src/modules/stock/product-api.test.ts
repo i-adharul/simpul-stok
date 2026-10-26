@@ -215,6 +215,23 @@ describe("PATCH /api/products/:id archive and restore (BL09)", () => {
     expect(await archivedAt(p.id)).not.toBeNull();
   });
 
+  it("keeps the movement history when archiving and restoring", async () => {
+    const p = await makeProduct(t.a.organizationId, "HIST");
+    await prisma.stockMovement.create({
+      data: {
+        organizationId: t.a.organizationId,
+        warehouseId: t.a.warehouseId,
+        productId: p.id,
+        quantityDelta: 4,
+        type: "RECEIVE",
+        createdById: t.a.users.OWNER,
+      },
+    });
+    expect((await patch(p.id, { archived: true })).status).toBe(200);
+    expect((await patch(p.id, { archived: false })).status).toBe(200);
+    expect(await prisma.stockMovement.count({ where: { productId: p.id } })).toBe(1);
+  });
+
   it("restores an archived product", async () => {
     const p = await makeProduct(t.a.organizationId, "OLD", new Date());
     const res = await patch(p.id, { archived: false });
