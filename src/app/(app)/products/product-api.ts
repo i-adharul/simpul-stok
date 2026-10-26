@@ -10,11 +10,19 @@ export type Product = {
   unit: string;
   minStock: number;
   archivedAt: string | null;
+  createdAt: string;
 };
 export type ProductPage = { items: Product[]; total: number; page: number; pageSize: number };
 
 export const PRODUCTS_QUERY_KEY = ["products"] as const;
 export const PAGE_SIZE = 20;
+
+// S08. Under the list key, so every write that invalidates the list refreshes the detail too.
+export const productKey = (id: string) => [...PRODUCTS_QUERY_KEY, "detail", id] as const;
+
+export function fetchProduct(id: string): Promise<Product> {
+  return apiFetch<Product>(`/api/products/${id}`);
+}
 
 export function fetchProducts(page: number, includeArchived = false): Promise<ProductPage> {
   const archived = includeArchived ? "&includeArchived=true" : "";
