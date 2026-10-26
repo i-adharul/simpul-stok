@@ -137,6 +137,44 @@ const warehouseItem = {
   readRow: readWarehouseRow,
 };
 
+// Product rows for the registry entries below. SKUs must be unique per organization, uppercase, no spaces.
+const createProductRow = async (t: TwoTenants, owner: TenantKey) =>
+  (
+    await t.prisma.product.create({
+      data: {
+        organizationId: t[owner].organizationId,
+        sku: t.unique("ROW").toUpperCase().replace(/\s+/g, ""),
+        name: `row of ${owner}`,
+        unit: "pcs",
+      },
+    })
+  ).id;
+
+// Every column PATCH can change (sku, name, unit, minStock, archivedAt), plus organizationId.
+const readProductRow = async (prisma: PrismaClient, id: string): Promise<RowSnapshot | null> => {
+  const row = await prisma.product.findUnique({ where: { id } });
+  return (
+    row && {
+      organizationId: row.organizationId,
+      sku: row.sku,
+      name: row.name,
+      unit: row.unit,
+      minStock: row.minStock,
+      archivedAt: row.archivedAt,
+    }
+  );
+};
+
+const productItem = {
+  kind: "item" as const,
+  route: "products/[id]",
+  module: () => import("@/app/api/products/[id]/route"),
+  idParam: "id",
+  path: (id: string) => `/api/products/${id}`,
+  createRow: createProductRow,
+  readRow: readProductRow,
+};
+
 export const TENANT_ENDPOINTS: TenantEndpoint[] = [
   {
     kind: "list",
@@ -176,5 +214,44 @@ export const TENANT_ENDPOINTS: TenantEndpoint[] = [
     action: "warehouse.manage",
     allowedRoles: rolesFor("warehouse.manage"),
     body: (t) => ({ code: t.unique("EDIT"), name: "Renamed", address: "Jl. Ubah 2" }),
+  },
+  {
+    kind: "list",
+    name: "GET /api/products",
+    route: "products",
+    method: "GET",
+    module: () => import("@/app/api/products/route"),
+    action: "product.read",
+    allowedRoles: rolesFor("product.read"),
+    path: "/api/products",
+    createRow: createProductRow,
+    idsOf: (json) => (json as { items: { id: string }[] }).items.map((row) => row.id),
+  },
+  {
+    kind: "create",
+    name: "POST /api/products",
+    route: "products",
+    method: "POST",
+    module: () => import("@/app/api/products/route"),
+    action: "product.manage",
+    allowedRoles: rolesFor("product.manage"),
+    path: "/api/products",
+    body: (t) => ({ sku: t.unique("NEW"), name: "New product", unit: "pcs", minStock: 5 }),
+    countRows: (prisma, organizationId) => prisma.product.count({ where: { organizationId } }),
+  },
+  {
+    ...productItem,
+    name: "GET /api/products/[id]",
+    method: "GET",
+    action: "product.read",
+    allowedRoles: rolesFor("product.read"),
+  },
+  {
+    ...productItem,
+    name: "PATCH /api/products/[id]",
+    method: "PATCH",
+    action: "product.manage",
+    allowedRoles: rolesFor("product.manage"),
+    body: (t) => ({ sku: t.unique("EDIT"), name: "Renamed", unit: "btl", minStock: 9 }),
   },
 ];
