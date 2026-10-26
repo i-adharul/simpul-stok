@@ -38,6 +38,7 @@ src/
   components/
     app-shell/         Sidebar, top bar and nav items
     session/           Session-expired dialog (P19)
+    pagination.tsx     Shared pagination control for list pages
     states/            Empty, error and loading-skeleton patterns
     ui/                shadcn/ui base components
     providers.tsx      Client providers (TanStack Query)
@@ -54,6 +55,8 @@ src/
     api-error.ts       Error response in the `{ code, message, details }` shape
     safe-redirect.ts   Accepts only same-site relative redirect targets
     format.ts          WIB dates and Indonesian number/Rupiah formats
+    pagination.ts      Page and pageSize parsing and clamping
+    unique-violation.ts  Detects a unique-constraint error so services can answer 409
   modules/
     platform/          Auth, organizations, members, plans, billing, platform admin
                        (tenant-client.ts: tenant-scoped Prisma client; tenant-route.ts: withTenantRoute;
@@ -61,6 +64,7 @@ src/
                        ownership.ts: foreign IDs of other organizations return 404;
                        subscription-access.ts: temporary write hook, always ACTIVE)
     stock/             Warehouses, products, stock levels, movements, transfers
+                       (warehouse-service/-schema, product-service/-schema, warehouse-members-service)
   test/                Test helpers and the tenant-isolation harness
   proxy.ts             Assigns the request ID and rejects cross-origin writes (CSRF) before routes run
   instrumentation.ts   Imports lib/env at server start so bad config stops the app
