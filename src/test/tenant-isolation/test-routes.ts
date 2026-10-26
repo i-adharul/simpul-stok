@@ -62,7 +62,7 @@ export function createWarehouseTestRoutes(flaws: readonly Flaw[] = []): Warehous
   const withTenantRoute = createTenantRoute({ prisma, secret: env.SESSION_SECRET });
 
   const listRoute = withTenantRoute(
-    async (_request, input, { ctx, db }) => {
+    async (_request, input, { db }) => {
       const cursor = input.query.cursor;
       const unscoped = has("unscoped-list") || (has("unscoped-cursor") && cursor !== undefined);
       const rows = unscoped
