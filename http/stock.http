@@ -1,0 +1,60 @@
+# Log in first with http/auth.http (Owner or Warehouse Admin), then run these in the same VS Code session.
+# Replace the two ids with real ones from GET /api/warehouses and GET /api/products.
+# Every write needs an Origin header equal to the server's own scheme and host, and an Idempotency-Key
+# (a UUID; the client makes a new one each time a form is opened).
+
+@warehouseId = 00000000-0000-7000-8000-000000000001
+@productId = 00000000-0000-7000-8000-000000000002
+
+### Receive stock
+# Expect 201 { id, warehouseId, productId, quantity: 24, createdAt } (never the current stock)
+POST http://localhost:3000/api/stock/receive
+Origin: http://localhost:3000
+Content-Type: application/json
+Idempotency-Key: 6f1d2c1e-3b0a-4c55-9c1a-0f7d3b9a1e01
+
+{ "warehouseId": "{{warehouseId}}", "productId": "{{productId}}", "quantity": 24, "note": "PO-123" }
+
+### Same key again (a retry)
+# Expect 201 with the identical body and the response header Idempotency-Replayed: true; stock grows once
+POST http://localhost:3000/api/stock/receive
+Origin: http://localhost:3000
+Content-Type: application/json
+Idempotency-Key: 6f1d2c1e-3b0a-4c55-9c1a-0f7d3b9a1e01
+
+{ "warehouseId": "{{warehouseId}}", "productId": "{{productId}}", "quantity": 24, "note": "PO-123" }
+
+### Missing Idempotency-Key
+# Expect 400 VALIDATION_ERROR with details [{ source: "header", path: "Idempotency-Key" }]
+POST http://localhost:3000/api/stock/receive
+Origin: http://localhost:3000
+Content-Type: application/json
+
+{ "warehouseId": "{{warehouseId}}", "productId": "{{productId}}", "quantity": 24 }
+
+### Quantity out of range
+# Expect 400 VALIDATION_ERROR (quantity is a whole number from 1 to 1,000,000)
+POST http://localhost:3000/api/stock/receive
+Origin: http://localhost:3000
+Content-Type: application/json
+Idempotency-Key: 6f1d2c1e-3b0a-4c55-9c1a-0f7d3b9a1e02
+
+{ "warehouseId": "{{warehouseId}}", "productId": "{{productId}}", "quantity": 1000001 }
+
+### Unknown or foreign warehouse
+# Expect 403 FORBIDDEN (the same for another organization's warehouse and one that does not exist)
+POST http://localhost:3000/api/stock/receive
+Origin: http://localhost:3000
+Content-Type: application/json
+Idempotency-Key: 6f1d2c1e-3b0a-4c55-9c1a-0f7d3b9a1e03
+
+{ "warehouseId": "00000000-0000-7000-8000-00000000ffff", "productId": "{{productId}}", "quantity": 1 }
+
+### Unknown or foreign product
+# Expect 404 NOT_FOUND
+POST http://localhost:3000/api/stock/receive
+Origin: http://localhost:3000
+Content-Type: application/json
+Idempotency-Key: 6f1d2c1e-3b0a-4c55-9c1a-0f7d3b9a1e04
+
+{ "warehouseId": "{{warehouseId}}", "productId": "00000000-0000-7000-8000-00000000ffff", "quantity": 1 }

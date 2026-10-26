@@ -109,6 +109,11 @@ const IDEMPOTENCY_EXPECTED: Record<IdempotencyFlaw, { check: CheckName; message:
     check: CHECK_NAMES.sameKeyTwice,
     message: /the second response body differs from the first/,
   },
+  "trusts-foreign-product": {
+    check: CHECK_NAMES.foreignKey,
+    // Without the lookup a random product id breaks the foreign key (500), so the baseline already fails.
+    message: /product of B: a random UUID must give 404, got status 500/,
+  },
 };
 
 describe("harness self-test: a flawed route turns the harness red", () => {

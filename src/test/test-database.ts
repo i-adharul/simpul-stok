@@ -38,8 +38,16 @@ export function assertSameTestDatabase(
   assertTestDatabaseUrl(databaseUrl);
 }
 
-export function createTestPrisma(testDatabaseUrl: string): PrismaClient {
+// `max` is the pool size. A concurrency test that starts N transactions waiting on one row lock needs
+// a pool of at least N, otherwise the waiting ones starve the pool and fail on maxWait, not on the rule.
+export function createTestPrisma(
+  testDatabaseUrl: string,
+  options: { max?: number } = {},
+): PrismaClient {
   return new PrismaClient({
-    adapter: new PrismaPg({ connectionString: assertTestDatabaseUrl(testDatabaseUrl) }),
+    adapter: new PrismaPg({
+      connectionString: assertTestDatabaseUrl(testDatabaseUrl),
+      max: options.max,
+    }),
   });
 }

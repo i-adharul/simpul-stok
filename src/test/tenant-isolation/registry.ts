@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "../../generated/prisma/client";
 import { can, type Action } from "../../modules/platform/can";
 import { TENANT_ROLES, type TenantKey, type TenantRole, type TwoTenants } from "./fixtures";
@@ -77,6 +78,17 @@ export type ListEndpoint = Common & {
   encodeCursor?: (id: string) => string;
 };
 
+// One request body that carries exactly ONE foreign key of organization B (the rest is valid for A),
+// next to the same body with a random UUID in its place. The harness requires the two answers to be
+// byte-identical, with the status the registry states: 403 when the service authorizes the key first
+// (a warehouse, judged against ctx.warehouseIds), 404 when it looks the key up (a product).
+export type ForeignBody = {
+  name: string;
+  body: unknown;
+  missingBody: unknown;
+  status: 403 | 404;
+};
+
 // POST /api/x that creates a row in the caller's organization.
 export type CreateEndpoint = Common & {
   kind: "create";
@@ -85,6 +97,12 @@ export type CreateEndpoint = Common & {
   body: (tenants: TwoTenants) => unknown;
   // Counts the rows of one organization, to prove a create lands in the right one (or nowhere).
   countRows: (prisma: PrismaClient, organizationId: string) => Promise<number>;
+  // Optional: a body for each foreign key the endpoint takes (a destination warehouse, a product).
+  // E5 transfers reuse it for the destination warehouse.
+  foreignBodies?: (tenants: TwoTenants) => ForeignBody[];
+  // Optional: the state the endpoint could change that countRows does not see (for example the stock
+  // quantity of a (warehouse, product) pair in both organizations), to prove nothing was written.
+  readRow?: (prisma: PrismaClient, tenants: TwoTenants) => Promise<Record<string, unknown>>;
 };
 
 export type TenantEndpoint = ItemEndpoint | ListEndpoint | CreateEndpoint;
@@ -204,6 +222,19 @@ const productItem = {
   readRow: readProductRow,
 };
 
+// The stock quantity of each organization's (warehouse, product) pair; null when no row exists yet.
+const readStockPairs = async (prisma: PrismaClient, t: TwoTenants) => {
+  const quantityOf = async (tenant: TwoTenants["a"]) =>
+    (
+      await prisma.stockLevel.findUnique({
+        where: {
+          warehouseId_productId: { warehouseId: tenant.warehouseId, productId: tenant.productId },
+        },
+      })
+    )?.quantity ?? null;
+  return { a: await quantityOf(t.a), b: await quantityOf(t.b) };
+};
+
 export const TENANT_ENDPOINTS: TenantEndpoint[] = [
   {
     kind: "list",
@@ -297,5 +328,36 @@ export const TENANT_ENDPOINTS: TenantEndpoint[] = [
     action: "product.manage",
     allowedRoles: rolesFor("product.manage"),
     body: (t) => ({ sku: t.unique("EDIT"), name: "Renamed", unit: "btl", minStock: 9 }),
+  },
+  {
+    kind: "create",
+    name: "POST /api/stock/receive",
+    route: "stock/receive",
+    method: "POST",
+    module: () => import("@/app/api/stock/receive/route"),
+    action: "stock.receive",
+    allowedRoles: rolesFor("stock.receive"),
+    idempotent: true,
+    path: "/api/stock/receive",
+    body: (t) => ({ warehouseId: t.a.warehouseId, productId: t.a.productId, quantity: 3 }),
+    countRows: (prisma, organizationId) =>
+      prisma.stockMovement.count({ where: { organizationId } }),
+    readRow: readStockPairs,
+    // The warehouse is authorized against ctx.warehouseIds first, so B's warehouse and a missing one
+    // are both 403; a product is looked up, so B's product and a missing one are both 404.
+    foreignBodies: (t) => [
+      {
+        name: "warehouse of B",
+        body: { warehouseId: t.b.warehouseId, productId: t.a.productId, quantity: 3 },
+        missingBody: { warehouseId: randomUUID(), productId: t.a.productId, quantity: 3 },
+        status: 403,
+      },
+      {
+        name: "product of B",
+        body: { warehouseId: t.a.warehouseId, productId: t.b.productId, quantity: 3 },
+        missingBody: { warehouseId: t.a.warehouseId, productId: randomUUID(), quantity: 3 },
+        status: 404,
+      },
+    ],
   },
 ];

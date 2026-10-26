@@ -113,3 +113,26 @@ Owner only (`member.manage`). Body: `{ "userIds": string[] }`: UUIDs, no duplica
 | 200    | Same shape as the `GET` above, after the change                                                                                                             |
 | 400    | `VALIDATION_ERROR`: wrong shape, duplicate or malformed IDs, more than 200, or a user that is inactive or not a Warehouse Admin or Viewer (generic message) |
 | 404    | `NOT_FOUND`: the warehouse is missing, archived or foreign, or any user ID is missing or belongs to another organization (the same body for both)           |
+
+## Stock receipt (BL11)
+
+### `POST /api/stock/receive`
+
+Owner and Warehouse Admin (`stock.receive`; a Warehouse Admin only for an assigned warehouse). Header `Idempotency-Key` (UUID) is required, see "Idempotency (BL14)". Body (unknown fields, including `organizationId`, are rejected):
+
+| Field         | Rule                                                                  |
+| ------------- | --------------------------------------------------------------------- |
+| `warehouseId` | UUID                                                                  |
+| `productId`   | UUID                                                                  |
+| `quantity`    | whole number from 1 to 1,000,000                                      |
+| `note`        | optional, at most 255 characters after trimming; empty is stored null |
+
+One transaction locks the warehouse row, rejects an archived warehouse or product, creates the stock row of the pair when it is missing, adds `quantity` and writes a `RECEIVE` movement (ADR 0013). The response holds only immutable data of that movement, never the current stock, so a replay equals the first answer; read the stock from `GET /api/stock`.
+
+| Status | Body                                                                                                                                                                                                     |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 201    | `{ "id", "warehouseId", "productId", "quantity", "createdAt" }`; a replay of the same key gives the same body plus the header `Idempotency-Replayed: true`                                               |
+| 400    | `VALIDATION_ERROR`: missing or malformed `Idempotency-Key`, wrong shape, `quantity` out of range, `note` over 255 characters, or an unknown field                                                        |
+| 403    | `FORBIDDEN`: a Viewer, or a warehouse that is not assigned to a Warehouse Admin, is archived, belongs to another organization or does not exist (the same body for all of these)                         |
+| 404    | `NOT_FOUND`: a product that belongs to another organization or does not exist (the same body for both)                                                                                                   |
+| 409    | `CONFLICT` (Indonesian message): the product is archived; the warehouse was archived while the request was running; or the new quantity would pass the largest value the column can hold (2,147,483,647) |
