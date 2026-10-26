@@ -16,6 +16,8 @@ let bWarehouse: string;
 let bProduct: string;
 let bTransfer: string;
 let aTransfer: string;
+let aUser: string;
+let bUser: string;
 
 async function seedOrg(slug: string) {
   const org = await prisma.organization.create({ data: { name: slug, slug } });
@@ -72,6 +74,8 @@ beforeEach(async () => {
   aProduct = a.product.id;
   aArchivedProduct = a.archivedProduct.id;
   aTransfer = a.transfer.id;
+  aUser = a.user.id;
+  bUser = b.user.id;
   bWarehouse = b.w1.id;
   bProduct = b.product.id;
   bTransfer = b.transfer.id;
@@ -158,6 +162,17 @@ describe("findOwnedOrThrow", () => {
       includeArchived: true,
     });
     expect(row.id).toBe(aArchivedWarehouse);
+  });
+});
+
+describe("users", () => {
+  it("findOwnedOrThrow and assertOwnedIds accept own users and give the same 404 for another organization's", async () => {
+    expect((await findOwnedOrThrow(tenant, "user", aUser)).id).toBe(aUser);
+    await assertOwnedIds(tenant, "user", [aUser]);
+    const lookup = await failure(findOwnedOrThrow(tenant, "user", bUser));
+    const asserted = await failure(assertOwnedIds(tenant, "user", [aUser, bUser]));
+    expect(lookup.status).toBe(404);
+    expect(await bodyOf(asserted)).toBe(await bodyOf(lookup));
   });
 });
 

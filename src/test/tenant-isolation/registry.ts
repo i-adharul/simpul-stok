@@ -137,6 +137,31 @@ const warehouseItem = {
   readRow: readWarehouseRow,
 };
 
+// The only state PUT .../members can change: the set of users assigned to the warehouse (sorted).
+const readWarehouseMembersRow = async (
+  prisma: PrismaClient,
+  id: string,
+): Promise<RowSnapshot | null> => {
+  const row = await prisma.warehouse.findUnique({ where: { id } });
+  if (!row) return null;
+  const assigned = await prisma.userWarehouse.findMany({
+    where: { warehouseId: id },
+    select: { userId: true },
+  });
+  return {
+    organizationId: row.organizationId,
+    userIds: assigned.map((a) => a.userId).sort(),
+  };
+};
+
+const warehouseMembersItem = {
+  ...warehouseItem,
+  route: "warehouses/[id]/members",
+  module: () => import("@/app/api/warehouses/[id]/members/route"),
+  path: (id: string) => `/api/warehouses/${id}/members`,
+  readRow: readWarehouseMembersRow,
+};
+
 // Product rows for the registry entries below. SKUs must be unique per organization, uppercase, no spaces.
 const createProductRow = async (t: TwoTenants, owner: TenantKey) =>
   (
@@ -214,6 +239,21 @@ export const TENANT_ENDPOINTS: TenantEndpoint[] = [
     action: "warehouse.manage",
     allowedRoles: rolesFor("warehouse.manage"),
     body: (t) => ({ code: t.unique("EDIT"), name: "Renamed", address: "Jl. Ubah 2" }),
+  },
+  {
+    ...warehouseMembersItem,
+    name: "GET /api/warehouses/[id]/members",
+    method: "GET",
+    action: "member.manage",
+    allowedRoles: rolesFor("member.manage"),
+  },
+  {
+    ...warehouseMembersItem,
+    name: "PUT /api/warehouses/[id]/members",
+    method: "PUT",
+    action: "member.manage",
+    allowedRoles: rolesFor("member.manage"),
+    body: (t) => ({ userIds: [t.a.users.VIEWER] }),
   },
   {
     kind: "list",

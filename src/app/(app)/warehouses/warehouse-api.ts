@@ -38,3 +38,27 @@ export function saveWarehouse(id: string | null, values: WarehouseFormValues): P
     body: JSON.stringify(toBody(values)),
   });
 }
+
+// P06 (docs/04_API_Spec.md, "Warehouse assignment"). Owner only.
+export type MemberCandidate = {
+  id: string;
+  name: string;
+  email: string;
+  role: "WAREHOUSE_ADMIN" | "VIEWER";
+  assigned: boolean;
+};
+export type MemberCandidates = { candidates: MemberCandidate[] };
+
+export const warehouseMembersKey = (id: string) => ["warehouse-members", id] as const;
+
+export function fetchWarehouseMembers(id: string): Promise<MemberCandidates> {
+  return apiFetch<MemberCandidates>(`/api/warehouses/${id}/members`);
+}
+
+// Replaces the whole set of assigned users.
+export function saveWarehouseMembers(id: string, userIds: string[]): Promise<MemberCandidates> {
+  return apiFetch<MemberCandidates>(`/api/warehouses/${id}/members`, {
+    method: "PUT",
+    body: JSON.stringify({ userIds }),
+  });
+}

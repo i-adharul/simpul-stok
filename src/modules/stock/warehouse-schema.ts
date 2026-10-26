@@ -43,3 +43,13 @@ export const listWarehousesQuery = z.object({
 export type CreateWarehouseBody = z.output<typeof createWarehouseBody>;
 export type UpdateWarehouseBody = z.output<typeof updateWarehouseBody>;
 export type ListWarehousesQuery = z.output<typeof listWarehousesQuery>;
+
+// BL10: the set of users assigned to a warehouse, replaced as a whole. Role and active checks
+// need the database, so they live in the service.
+export const replaceWarehouseMembersBody = z.strictObject({
+  userIds: z
+    .array(z.uuid())
+    .max(200)
+    .refine((ids) => new Set(ids).size === ids.length, { message: "Duplicate user IDs." }),
+});
+export type ReplaceWarehouseMembersBody = z.output<typeof replaceWarehouseMembersBody>;

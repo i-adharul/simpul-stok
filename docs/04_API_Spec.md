@@ -7,7 +7,7 @@
 | Audience | People who build endpoints, clients, and API tests                                                                                                                       |
 | Related  | The rules for each endpoint are in `02_Functional_Spec.md` (BL); the error format is in BL29; the documentation is run through one `.http` file per resource in the repo |
 
-## REST endpoint list (51)
+## REST endpoint list (52)
 
 REST through Next.js Route Handlers is the main path between the UI and the server. List pages may read directly through a service in Server Components, but every write action uses these endpoints. All endpoints follow BL02, BL03, and BL29, are validated with Zod, and return JSON.
 
@@ -16,7 +16,7 @@ REST through Next.js Route Handlers is the main path between the UI and the serv
 | Auth (7)                        | `POST /api/auth/login`, `POST /api/auth/register-organization`, `POST /api/auth/accept-invite`, `POST /api/auth/reset-password`, `POST /api/auth/logout`, `GET /api/me`, `PATCH /api/me/password` | The first four are public (accept-invite and reset-password use a token); the rest are for any logged-in user                                                                            |
 | Organization (2)                | `GET /api/organization`, `PATCH /api/organization`                                                                                                                                                | Read: every tenant user; update: Owner                                                                                                                                                   |
 | Members and invitations (7)     | `GET /api/members`, `PATCH /api/members/:id`, `POST /api/members/:id/reset-link`, `GET /api/invitations`, `POST /api/invitations`, `DELETE /api/invitations/:id`, `GET /api/invitations/:token`   | Owner; the last one is public with a token                                                                                                                                               |
-| Warehouses (5)                  | `GET /api/warehouses`, `POST /api/warehouses`, `GET /api/warehouses/:id`, `PATCH /api/warehouses/:id`, `PUT /api/warehouses/:id/members`                                                          | Read according to assigned warehouses; write: Owner                                                                                                                                      |
+| Warehouses (6)                  | `GET /api/warehouses`, `POST /api/warehouses`, `GET /api/warehouses/:id`, `PATCH /api/warehouses/:id`, `GET /api/warehouses/:id/members`, `PUT /api/warehouses/:id/members`                       | Read according to assigned warehouses; write: Owner                                                                                                                                      |
 | Products (4)                    | `GET /api/products`, `POST /api/products`, `GET /api/products/:id`, `PATCH /api/products/:id`                                                                                                     | Read: every tenant user; write: Owner                                                                                                                                                    |
 | Stock (7)                       | `GET /api/stock`, `POST /api/stock/receive`, `POST /api/stock/adjust`, `POST /api/stock/transfers`, `GET /api/stock/transfers/:id`, `GET /api/stock/movements`, `GET /api/stock/movements/:id`    | Read according to assigned warehouses; write: Owner and Warehouse Admin according to warehouse                                                                                           |
 | Import and export (4)           | `POST /api/imports`, `POST /api/imports/:id/commit`, `GET /api/exports/stock`, `GET /api/exports/movements`                                                                                       | Import: Owner and Warehouse Admin; export according to warehouse. `exports/stock` also serves S07 and accepts `format` csv, xlsx, or pdf; `exports/movements` supports only csv and xlsx |
@@ -74,3 +74,24 @@ Any logged-in user, in every subscription state (BL23). Body: `{ "currentPasswor
 | 400    | `{ "code": "VALIDATION_ERROR", "message": <reason the new password is refused>, "details": { "field": "newPassword" } }`                                           |
 | 401    | `UNAUTHENTICATED`, as for `GET /api/me`                                                                                                                            |
 | 403    | `CSRF_REJECTED`                                                                                                                                                    |
+
+## Warehouse assignment (BL10)
+
+### `GET /api/warehouses/:id/members`
+
+Owner only (`member.manage`; other roles get `403` before anything else). Lists the users who can be assigned to the warehouse: active users of the organization whose role is `WAREHOUSE_ADMIN` or `VIEWER` (the Owner and platform admins never appear).
+
+| Status | Body                                                                                                                           |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| 200    | `{ "candidates": [{ "id", "name", "email", "role", "assigned": boolean }] }`, sorted by name; `assigned` is for this warehouse |
+| 404    | `NOT_FOUND`: the warehouse is missing, archived, or belongs to another organization                                            |
+
+### `PUT /api/warehouses/:id/members`
+
+Owner only (`member.manage`). Body: `{ "userIds": string[] }`: UUIDs, no duplicates, at most 200. It **replaces** the whole set of assignments of this warehouse in one transaction, so repeating the same request gives the same result. An empty list removes every assignment.
+
+| Status | Body                                                                                                                                                        |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 200    | Same shape as the `GET` above, after the change                                                                                                             |
+| 400    | `VALIDATION_ERROR`: wrong shape, duplicate or malformed IDs, more than 200, or a user that is inactive or not a Warehouse Admin or Viewer (generic message) |
+| 404    | `NOT_FOUND`: the warehouse is missing, archived or foreign, or any user ID is missing or belongs to another organization (the same body for both)           |
