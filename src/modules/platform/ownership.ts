@@ -1,4 +1,4 @@
-import type { Product, StockTransfer, Warehouse } from "../../generated/prisma/client";
+import type { Product, StockTransfer, User, Warehouse } from "../../generated/prisma/client";
 import { notFoundError } from "../../lib/api-error";
 import type { TenantClient } from "./tenant-client";
 
@@ -6,7 +6,7 @@ import type { TenantClient } from "./tenant-client";
 // of another organization is already invisible: "not yours" and "does not exist" are the same
 // answer, and the same 404 body.
 
-type RowOf = { warehouse: Warehouse; product: Product; stockTransfer: StockTransfer };
+type RowOf = { warehouse: Warehouse; product: Product; stockTransfer: StockTransfer; user: User };
 export type OwnedModel = keyof RowOf;
 // Only these two have archivedAt. Archived rows are hidden unless the caller opts in.
 const ARCHIVABLE = new Set<OwnedModel>(["warehouse", "product"]);

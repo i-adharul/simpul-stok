@@ -56,3 +56,16 @@ Origin: http://localhost:3000
 Content-Type: application/json
 
 { "archived": false }
+
+### List users that can be assigned to a warehouse (Owner only; replace the id)
+# Expect 200 { candidates: [{ id, name, email, role, assigned }] }; 403 for other roles
+GET http://localhost:3000/api/warehouses/00000000-0000-0000-0000-000000000000/members
+
+### Replace the users assigned to a warehouse (Owner only; replace the ids)
+# Expect 200 with the same shape as the list. An empty userIds clears the assignments.
+# 400 for the Owner or an inactive user; 404 for a user id of another organization
+PUT http://localhost:3000/api/warehouses/00000000-0000-0000-0000-000000000000/members
+Origin: http://localhost:3000
+Content-Type: application/json
+
+{ "userIds": ["00000000-0000-0000-0000-000000000001"] }
