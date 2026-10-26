@@ -58,3 +58,30 @@ Content-Type: application/json
 Idempotency-Key: 6f1d2c1e-3b0a-4c55-9c1a-0f7d3b9a1e04
 
 { "warehouseId": "{{warehouseId}}", "productId": "00000000-0000-7000-8000-00000000ffff", "quantity": 1 }
+
+### Adjust stock (SET: the value is the new quantity)
+# Owner or Warehouse Admin of the warehouse. Expect 201 { id, warehouseId, productId, quantity: <difference>, createdAt, reason }
+POST http://localhost:3000/api/stock/adjust
+Origin: http://localhost:3000
+Content-Type: application/json
+Idempotency-Key: 6f1d2c1e-3b0a-4c55-9c1a-0f7d3b9a1e11
+
+{ "warehouseId": "{{warehouseId}}", "productId": "{{productId}}", "mode": "SET", "value": 10, "reason": "STOCK_OPNAME", "note": "Hitung ulang" }
+
+### Adjust stock (DELTA: the value is the difference)
+# Expect 201; 409 if the result would be below 0; 400 if the difference is 0 or a limit of 1,000,000 is passed
+POST http://localhost:3000/api/stock/adjust
+Origin: http://localhost:3000
+Content-Type: application/json
+Idempotency-Key: 6f1d2c1e-3b0a-4c55-9c1a-0f7d3b9a1e12
+
+{ "warehouseId": "{{warehouseId}}", "productId": "{{productId}}", "mode": "DELTA", "value": -2, "reason": "DAMAGED" }
+
+### Adjust below zero
+# Expect 409 CONFLICT "Stok tidak boleh menjadi kurang dari 0."
+POST http://localhost:3000/api/stock/adjust
+Origin: http://localhost:3000
+Content-Type: application/json
+Idempotency-Key: 6f1d2c1e-3b0a-4c55-9c1a-0f7d3b9a1e13
+
+{ "warehouseId": "{{warehouseId}}", "productId": "{{productId}}", "mode": "DELTA", "value": -999999, "reason": "LOST" }

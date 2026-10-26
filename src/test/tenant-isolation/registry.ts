@@ -360,4 +360,64 @@ export const TENANT_ENDPOINTS: TenantEndpoint[] = [
       },
     ],
   },
+  {
+    kind: "create",
+    name: "POST /api/stock/adjust",
+    route: "stock/adjust",
+    method: "POST",
+    module: () => import("@/app/api/stock/adjust/route"),
+    action: "stock.adjust",
+    allowedRoles: rolesFor("stock.adjust"),
+    idempotent: true,
+    path: "/api/stock/adjust",
+    body: (t) => ({
+      warehouseId: t.a.warehouseId,
+      productId: t.a.productId,
+      mode: "DELTA",
+      value: 3,
+      reason: "CORRECTION",
+    }),
+    countRows: (prisma, organizationId) =>
+      prisma.stockMovement.count({ where: { organizationId } }),
+    readRow: readStockPairs,
+    // Same as receive: B's warehouse and a missing one are both 403; B's product and a missing one are 404.
+    foreignBodies: (t) => [
+      {
+        name: "warehouse of B",
+        body: {
+          warehouseId: t.b.warehouseId,
+          productId: t.a.productId,
+          mode: "DELTA",
+          value: 3,
+          reason: "CORRECTION",
+        },
+        missingBody: {
+          warehouseId: randomUUID(),
+          productId: t.a.productId,
+          mode: "DELTA",
+          value: 3,
+          reason: "CORRECTION",
+        },
+        status: 403,
+      },
+      {
+        name: "product of B",
+        body: {
+          warehouseId: t.a.warehouseId,
+          productId: t.b.productId,
+          mode: "DELTA",
+          value: 3,
+          reason: "CORRECTION",
+        },
+        missingBody: {
+          warehouseId: t.a.warehouseId,
+          productId: randomUUID(),
+          mode: "DELTA",
+          value: 3,
+          reason: "CORRECTION",
+        },
+        status: 404,
+      },
+    ],
+  },
 ];
