@@ -85,6 +85,96 @@ export type CreateEndpoint = Common & {
 
 export type TenantEndpoint = ItemEndpoint | ListEndpoint | CreateEndpoint;
 
-// Empty until the first tenant endpoint story (E3). The harness itself is proven by
-// harness.selftest.test.ts, which runs it against a test-only route.
-export const TENANT_ENDPOINTS: TenantEndpoint[] = [];
+// Warehouse rows for the registry entries below. Codes must be unique per organization and uppercase.
+const createWarehouseRow = async (t: TwoTenants, owner: TenantKey) =>
+  (
+    await t.prisma.warehouse.create({
+      data: {
+        organizationId: t[owner].organizationId,
+        code: t.unique("ROW").toUpperCase(),
+        name: `row of ${owner}`,
+      },
+    })
+  ).id;
+
+// The list only shows a Warehouse Admin or Viewer their assigned warehouses, so the row the harness
+// expects to see is also assigned to both of them.
+const createAssignedWarehouseRow = async (t: TwoTenants, owner: TenantKey) => {
+  const id = await createWarehouseRow(t, owner);
+  for (const role of ["WAREHOUSE_ADMIN", "VIEWER"] as const) {
+    await t.prisma.userWarehouse.create({
+      data: {
+        organizationId: t[owner].organizationId,
+        userId: t[owner].users[role],
+        warehouseId: id,
+      },
+    });
+  }
+  return id;
+};
+
+// Every column PATCH can change (code, name, address), plus organizationId and archivedAt.
+const readWarehouseRow = async (prisma: PrismaClient, id: string): Promise<RowSnapshot | null> => {
+  const row = await prisma.warehouse.findUnique({ where: { id } });
+  return (
+    row && {
+      organizationId: row.organizationId,
+      code: row.code,
+      name: row.name,
+      address: row.address,
+      archivedAt: row.archivedAt,
+    }
+  );
+};
+
+const warehouseItem = {
+  kind: "item" as const,
+  route: "warehouses/[id]",
+  module: () => import("@/app/api/warehouses/[id]/route"),
+  idParam: "id",
+  path: (id: string) => `/api/warehouses/${id}`,
+  createRow: createWarehouseRow,
+  readRow: readWarehouseRow,
+};
+
+export const TENANT_ENDPOINTS: TenantEndpoint[] = [
+  {
+    kind: "list",
+    name: "GET /api/warehouses",
+    route: "warehouses",
+    method: "GET",
+    module: () => import("@/app/api/warehouses/route"),
+    action: "warehouse.read",
+    allowedRoles: rolesFor("warehouse.read"),
+    path: "/api/warehouses",
+    createRow: createAssignedWarehouseRow,
+    idsOf: (json) => (json as { items: { id: string }[] }).items.map((row) => row.id),
+  },
+  {
+    kind: "create",
+    name: "POST /api/warehouses",
+    route: "warehouses",
+    method: "POST",
+    module: () => import("@/app/api/warehouses/route"),
+    action: "warehouse.manage",
+    allowedRoles: rolesFor("warehouse.manage"),
+    path: "/api/warehouses",
+    body: (t) => ({ code: t.unique("NEW"), name: "New warehouse", address: "Jl. Baru 1" }),
+    countRows: (prisma, organizationId) => prisma.warehouse.count({ where: { organizationId } }),
+  },
+  {
+    ...warehouseItem,
+    name: "GET /api/warehouses/[id]",
+    method: "GET",
+    action: "warehouse.read",
+    allowedRoles: rolesFor("warehouse.read"),
+  },
+  {
+    ...warehouseItem,
+    name: "PATCH /api/warehouses/[id]",
+    method: "PATCH",
+    action: "warehouse.manage",
+    allowedRoles: rolesFor("warehouse.manage"),
+    body: (t) => ({ code: t.unique("EDIT"), name: "Renamed", address: "Jl. Ubah 2" }),
+  },
+];

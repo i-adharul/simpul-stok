@@ -7,7 +7,7 @@ import { describeTenantIsolation } from "./run-harness";
 describeTenantIsolation(TENANT_ENDPOINTS);
 
 describe("registry", () => {
-  it("is a list (empty until the first tenant endpoint story)", () => {
+  it("is a list", () => {
     expect(Array.isArray(TENANT_ENDPOINTS)).toBe(true);
   });
 });
