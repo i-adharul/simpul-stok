@@ -125,6 +125,9 @@ access. Only the last layer talks to Prisma.
 16. A new API route is registered in the same story: a tenant endpoint in `src/test/tenant-isolation/registry.ts`
     (or `EXEMPT_ROUTES` with a reason), a non-tenant route in `PUBLIC_ROUTES`. CI fails if one is missing
     (`inventory.test.ts`; how-to in `src/test/README.md`).
+17. A stock write endpoint (receive, adjust, transfer, import commit) uses `withTenantRoute(..., { idempotent: true })`,
+    calls `authorize()` first, then `runIdempotent` (`src/modules/platform/idempotency.ts`, ADR 0012), and is
+    registered with `idempotent: true`. `inventory.test.ts` fails otherwise.
 
 ## Commands
 

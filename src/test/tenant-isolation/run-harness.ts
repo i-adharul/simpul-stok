@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, it, vi } from "vitest";
 import { env } from "../../lib/env";
 import type { PrismaClient } from "../../generated/prisma/client";
@@ -29,6 +30,8 @@ export const CHECK_NAMES = {
   listClean: "list contains none of the other organization's rows",
   cursorClean: "cursor holding another organization's id leaks nothing",
   bodyOrganization: "organizationId from the request is ignored or rejected",
+  idempotencyKey: "write without a valid Idempotency-Key gets 400",
+  sameKeyTwice: "same key twice gives one effect and the same body",
 } as const;
 export type CheckName = (typeof CHECK_NAMES)[keyof typeof CHECK_NAMES];
 
@@ -50,9 +53,16 @@ function fail(check: CheckName, detail: string): never {
 const MISSING_ID = "019a0000-0000-7000-8000-000000000000";
 const MALFORMED_ID = "not-a-uuid";
 
-type Reply = { status: number; text: string; json: unknown };
+type Reply = { status: number; text: string; json: unknown; headers: Headers };
 type Caller = { userId?: string };
-type SendOptions = { id?: string; body?: unknown; query?: string };
+// idempotencyKey: a value to send; null omits the header. Default: a fresh UUID, because an idempotent
+// endpoint answers 400 without one and the other checks must reach the handler.
+type SendOptions = {
+  id?: string;
+  body?: unknown;
+  query?: string;
+  idempotencyKey?: string | null;
+};
 
 async function send(
   endpoint: TenantEndpoint,
@@ -64,6 +74,11 @@ async function send(
   if (!handler)
     throw new Error(`${endpoint.name}: the route module does not export ${endpoint.method}`);
   const cookie = caller.userId ? await cookieFor(caller.userId) : undefined;
+  const key = "idempotencyKey" in options ? options.idempotencyKey : randomUUID();
+  const headers =
+    endpoint.idempotent && endpoint.method !== "GET" && key
+      ? { "Idempotency-Key": key }
+      : undefined;
   let response: Response;
   if (endpoint.kind === "item") {
     const id = options.id ?? MISSING_ID;
@@ -73,6 +88,7 @@ async function send(
       path: endpoint.path(id),
       cookie,
       body,
+      headers,
       params: { [endpoint.idParam]: id },
     });
   } else {
@@ -87,6 +103,7 @@ async function send(
       path: options.query ? withQuery(endpoint.path, options.query) : endpoint.path,
       cookie,
       body,
+      headers,
     });
   }
   const text = await response.text();
@@ -96,7 +113,7 @@ async function send(
   } catch {
     // not JSON; the checks only read status and text then
   }
-  return { status: response.status, text, json };
+  return { status: response.status, text, json, headers: response.headers };
 }
 
 const asA = (tenants: TwoTenants, role: TenantRole): Caller => ({ userId: tenants.a.users[role] });
@@ -150,6 +167,8 @@ const isOrganizationWrite = (e: TenantEndpoint): e is TenantEndpoint =>
   (e.kind === "create" || (e.kind === "item" && e.method !== "GET")) &&
   isOrganizationAction(e.action);
 const hasCursor = (e: TenantEndpoint): e is ListEndpoint => isList(e) && e.supportsCursor === true;
+const isIdempotentWrite = (e: TenantEndpoint): e is TenantEndpoint =>
+  e.idempotent === true && e.method !== "GET";
 const takesInput = (e: TenantEndpoint): e is TenantEndpoint =>
   e.kind !== "item" || (e.method !== "GET" && e.body !== undefined);
 
@@ -338,6 +357,82 @@ export const CHECKS: Check[] = [
     const row = await readRows(tenants, endpoint, id);
     if (row && row.organizationId !== tenants.a.organizationId) {
       fail(CHECK_NAMES.bodyOrganization, "organizationId in the body moved A's row to B");
+    }
+  }),
+  defineCheck(CHECK_NAMES.idempotencyKey, isIdempotentWrite, async (tenants, endpoint) => {
+    // A caller who may act, with a valid body, a missing key and then a key that is no UUID. The 400
+    // comes from withTenantRoute before the handler, so a route built without `idempotent: true`
+    // reaches its handler instead and fails here.
+    const role = endpoint.allowedRoles[0];
+    const id = endpoint.kind === "item" ? await endpoint.createRow(tenants, "a") : undefined;
+    const countOwn = () =>
+      endpoint.kind === "create"
+        ? endpoint.countRows(tenants.prisma, tenants.a.organizationId)
+        : Promise.resolve(0);
+    const before = await countOwn();
+    for (const [label, idempotencyKey] of [
+      ["missing", null],
+      ["not a UUID", "not-a-uuid"],
+    ] as const) {
+      const reply = await send(endpoint, tenants, asA(tenants, role), { id, idempotencyKey });
+      if (reply.status !== 400 || codeOf(reply) !== "VALIDATION_ERROR") {
+        fail(
+          CHECK_NAMES.idempotencyKey,
+          `${role}: a key that is ${label} must give 400 VALIDATION_ERROR, got ${describeReply(reply)}`,
+        );
+      }
+    }
+    if ((await countOwn()) !== before) {
+      fail(CHECK_NAMES.idempotencyKey, "a request without a valid key still created a row");
+    }
+  }),
+  defineCheck(CHECK_NAMES.sameKeyTwice, isIdempotentWrite, async (tenants, endpoint) => {
+    // The same valid request twice with ONE key. A route that declares idempotent: true but never
+    // calls runIdempotent (or invents its own key) acts twice and fails here.
+    const role = endpoint.allowedRoles[0];
+    const id = endpoint.kind === "item" ? await endpoint.createRow(tenants, "a") : undefined;
+    const idempotencyKey = randomUUID();
+    const countOwn = () =>
+      endpoint.kind === "create"
+        ? endpoint.countRows(tenants.prisma, tenants.a.organizationId)
+        : Promise.resolve(0);
+    const before = await countOwn();
+    const first = await send(endpoint, tenants, asA(tenants, role), { id, idempotencyKey });
+    const afterFirst =
+      endpoint.kind === "item" && id ? await readRows(tenants, endpoint, id) : null;
+    const second = await send(endpoint, tenants, asA(tenants, role), { id, idempotencyKey });
+
+    if (!is2xx(first) || second.status !== first.status) {
+      fail(
+        CHECK_NAMES.sameKeyTwice,
+        `${role}: expected the same 2xx status twice, got ${describeReply(first)} and ${describeReply(second)}`,
+      );
+    }
+    if (second.text !== first.text) {
+      fail(
+        CHECK_NAMES.sameKeyTwice,
+        `${role}: the second response body differs from the first: ${second.text.slice(0, 120)} vs ${first.text.slice(0, 120)}`,
+      );
+    }
+    if (first.headers.has("Idempotency-Replayed")) {
+      fail(
+        CHECK_NAMES.sameKeyTwice,
+        `${role}: the first response must not carry Idempotency-Replayed`,
+      );
+    }
+    if (second.headers.get("Idempotency-Replayed") !== "true") {
+      fail(
+        CHECK_NAMES.sameKeyTwice,
+        `${role}: the second response lacks Idempotency-Replayed: true`,
+      );
+    }
+    if (endpoint.kind === "create" && (await countOwn()) !== before + 1) {
+      fail(CHECK_NAMES.sameKeyTwice, `${role}: the same key twice did not create exactly one row`);
+    }
+    if (endpoint.kind === "item" && id) {
+      if (!sameJson(afterFirst, await readRows(tenants, endpoint, id))) {
+        fail(CHECK_NAMES.sameKeyTwice, `${role}: the second call changed the row again`);
+      }
     }
   }),
 ];

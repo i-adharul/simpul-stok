@@ -189,3 +189,72 @@ describe("withTenantRoute", () => {
     expect(wrapped.apiOptions).toMatchObject({ body: "none", route: "/api/x/[id]" });
   });
 });
+
+describe("withTenantRoute with idempotent: true", () => {
+  const handler = vi.fn();
+  const route = () =>
+    withTenantRoute(
+      async (_request, _input, tenant) => {
+        handler(tenant.idempotencyKey);
+        return Response.json({ ok: true });
+      },
+      { body: bodySchema, requires: "warehouse.manage", idempotent: true },
+    );
+
+  async function send(options: { role?: string; key?: string; method?: string; body?: unknown }) {
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (options.role) {
+      headers.cookie = `${SESSION_COOKIE_NAME}=${await createSessionToken(userIds[options.role], secret)}`;
+    }
+    if (options.key !== undefined) headers["idempotency-key"] = options.key;
+    const method = options.method ?? "POST";
+    return new Request("http://localhost/api/warehouses", {
+      method,
+      headers,
+      body: method === "GET" ? undefined : JSON.stringify(options.body ?? { name: "ok" }),
+    });
+  }
+
+  beforeEach(() => handler.mockClear());
+
+  it("hands the key to the handler in lower case", async () => {
+    const key = "0195E3A2-7C11-7B4E-9F3A-1C2D3E4F5A6B";
+    const response = await route()(await send({ role: "OWNER", key }));
+    expect(response.status).toBe(200);
+    expect(handler).toHaveBeenCalledWith(key.toLowerCase());
+  });
+
+  it("returns 400 for a write with a missing key or a key that is not a UUID", async () => {
+    for (const key of [undefined, "", "not-a-uuid"]) {
+      const response = await route()(await send({ role: "OWNER", key }));
+      expect(response.status, String(key)).toBe(400);
+      expect(await response.json()).toMatchObject({
+        code: "VALIDATION_ERROR",
+        details: [{ source: "header", path: "Idempotency-Key" }],
+      });
+    }
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("answers 401, 403 before it looks at the key", async () => {
+    expect((await route()(await send({}))).status).toBe(401);
+    expect((await route()(await send({ role: "PLATFORM_ADMIN" }))).status).toBe(403);
+    expect((await route()(await send({ role: "VIEWER" }))).status).toBe(403);
+  });
+
+  it("checks the key before the body", async () => {
+    const response = await route()(await send({ role: "OWNER", body: {} }));
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as { details: { source: string }[] }).details).toEqual([
+      expect.objectContaining({ source: "header" }),
+    ]);
+  });
+
+  it("does not ask a read for a key", async () => {
+    const reader = withTenantRoute(async () => Response.json({ ok: true }), {
+      idempotent: true,
+    });
+    const response = await reader(await send({ role: "OWNER", method: "GET" }));
+    expect(response.status).toBe(200);
+  });
+});

@@ -11,6 +11,11 @@ import {
   type CheckName,
 } from "./run-harness";
 import {
+  IDEMPOTENCY_FLAWS,
+  createIdempotentTestRoutes,
+  type IdempotencyFlaw,
+} from "../idempotency/test-routes";
+import {
   FLAWS,
   createWarehouseTestRoutes,
   type Flaw,
@@ -28,6 +33,11 @@ const control = createWarehouseTestRoutes();
 afterAll(() => control.dispose());
 
 describeTenantIsolation(Object.values(control.endpoints));
+
+// A stock write built correctly (idempotent: true) passes every check, including the key check.
+const idempotentControl = createIdempotentTestRoutes();
+afterAll(() => idempotentControl.dispose());
+describeTenantIsolation([idempotentControl.endpoint]);
 
 type Expectation = {
   check: CheckName;
@@ -89,6 +99,18 @@ const EXPECTED: Record<Flaw, Expectation> = {
   },
 };
 
+// The flaws of a stock write that uses the Idempotency-Key wrapper, each with the check that must catch it.
+const IDEMPOTENCY_EXPECTED: Record<IdempotencyFlaw, { check: CheckName; message: RegExp }> = {
+  "ignores-idempotency-header": {
+    check: CHECK_NAMES.idempotencyKey,
+    message: /a key that is missing must give 400 VALIDATION_ERROR, got status 201/,
+  },
+  "never-calls-runIdempotent": {
+    check: CHECK_NAMES.sameKeyTwice,
+    message: /the second response body differs from the first/,
+  },
+};
+
 describe("harness self-test: a flawed route turns the harness red", () => {
   let prisma: PrismaClient;
   let tenants: TwoTenants;
@@ -106,7 +128,11 @@ describe("harness self-test: a flawed route turns the harness red", () => {
   });
 
   it("covers every check with at least one flaw", () => {
-    const covered = new Set(Object.values(EXPECTED).map((e) => e.check));
+    // The idempotency flaws are in IDEMPOTENCY_EXPECTED (they need a route that uses runIdempotent).
+    const covered = new Set<CheckName>([
+      ...Object.values(EXPECTED).map((e) => e.check),
+      ...Object.values(IDEMPOTENCY_EXPECTED).map((e) => e.check),
+    ]);
     for (const check of CHECKS) {
       // noSession and platformAdmin are enforced by withTenantRoute itself, not by route code,
       // so a route cannot be written with those flaws.
@@ -115,6 +141,7 @@ describe("harness self-test: a flawed route turns the harness red", () => {
       expect(covered.has(check.name), `no flaw exercises "${check.name}"`).toBe(true);
     }
     expect(Object.keys(EXPECTED).sort()).toEqual([...FLAWS].sort());
+    expect(Object.keys(IDEMPOTENCY_EXPECTED).sort()).toEqual([...IDEMPOTENCY_FLAWS].sort());
   });
 
   it.each(FLAWS)("flaw %s is caught with the expected message", async (flaw) => {
@@ -138,6 +165,25 @@ describe("harness self-test: a flawed route turns the harness red", () => {
 
       // The control: the correct route passes this very check.
       await runCheck(expected.check, tenants, control.endpoints[expected.endpoint]);
+    } finally {
+      await flawed.dispose();
+    }
+  });
+  it.each(IDEMPOTENCY_FLAWS)("flaw %s is caught with the expected message", async (flaw) => {
+    const expected = IDEMPOTENCY_EXPECTED[flaw];
+    const flawed = createIdempotentTestRoutes({ flaws: [flaw] });
+    try {
+      const error = await runCheck(expected.check, tenants, flawed.endpoint).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect(error, `"${expected.check}" did not fail for flaw ${flaw}`).toBeInstanceOf(
+        TenantIsolationFailure,
+      );
+      expect((error as TenantIsolationFailure).check).toBe(expected.check);
+      expect((error as TenantIsolationFailure).message).toMatch(expected.message);
+      // The control: the correct route passes this very check.
+      await runCheck(expected.check, tenants, idempotentControl.endpoint);
     } finally {
       await flawed.dispose();
     }

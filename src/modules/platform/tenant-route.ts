@@ -1,5 +1,6 @@
 import type { PrismaClient } from "../../generated/prisma/client";
 import {
+  WRITE_METHODS,
   withApiLog,
   type ApiInput,
   type ApiOptions,
@@ -8,6 +9,7 @@ import {
 import { db } from "../../lib/db";
 import { env } from "../../lib/env";
 import { authorize, type OrganizationAction } from "./can";
+import { IDEMPOTENCY_KEY_HEADER, parseIdempotencyKey } from "./idempotency";
 import { getRequestContext, type RequestContext } from "./request-context";
 import { createTenantClient, type TenantClient } from "./tenant-client";
 
@@ -15,18 +17,26 @@ import { createTenantClient, type TenantClient } from "./tenant-client";
 // client it may use (rule 3).
 export type TenantRouteArgs = { ctx: RequestContext; db: TenantClient };
 
+// With `idempotent: true` the handler also gets the validated Idempotency-Key (lower case).
+type IdempotentArgs<O> = O extends { idempotent: true } ? { idempotencyKey: string } : unknown;
+
 type TenantRouteOptions = Omit<ApiOptions, "guard"> & {
   // An organization-level action the role must hold. Checked right after the context and BEFORE the
   // input, so a role without the right gets 403 and learns nothing about the body. Warehouse-level
   // actions (stock.*, history.read) are not accepted here: they need a warehouseId, so the handler
   // calls authorize() itself.
   requires?: OrganizationAction;
+  // For stock write endpoints (BL14, ADR 0012). A write method must carry an Idempotency-Key header
+  // holding a UUID, otherwise 400; other methods ignore the option. The key is checked after the
+  // context and `requires` (a caller without access learns nothing) and before the body. The handler
+  // calls authorize() and then runIdempotent() with the key it receives.
+  idempotent?: true;
 };
 
 type TenantHandler<O extends TenantRouteOptions, Context extends RouteContext> = (
   request: Request,
   input: ApiInput<O>,
-  tenant: TenantRouteArgs,
+  tenant: TenantRouteArgs & IdempotentArgs<O>,
   context: Context,
 ) => Promise<Response> | Response;
 
@@ -43,8 +53,9 @@ export function isTenantGuard(guard: unknown): boolean {
 // The route helper for every endpoint of a signed-in organization. Order of checks:
 //   1. the request context from the session cookie (401 unauthenticated, 403 platform admin),
 //   2. `requires`, when given (403 for a role without the right),
-//   3. the input (400),
-//   4. the handler.
+//   3. the Idempotency-Key header, when `idempotent` and the method writes (400),
+//   4. the input (400),
+//   5. the handler.
 // The context comes first so a caller without access learns nothing about the body. The Prisma
 // client is injected so tests can use the test database; withTenantRoute below wires the real one.
 export function createTenantRoute(deps: { prisma: PrismaClient; secret: string }) {
@@ -58,16 +69,25 @@ export function createTenantRoute(deps: { prisma: PrismaClient; secret: string }
     Context extends RouteContext = RouteContext,
   >(handler: TenantHandler<O, Context>, options: O = {} as O) {
     const guard = Object.assign(
-      async (request: Request): Promise<TenantRouteArgs> => {
+      async (request: Request): Promise<TenantRouteArgs & { idempotencyKey?: string }> => {
         const tenant = await resolveTenant(request);
         if (options.requires) authorize(tenant.ctx, options.requires);
+        if (options.idempotent && WRITE_METHODS.has(request.method)) {
+          const idempotencyKey = parseIdempotencyKey(request.headers.get(IDEMPOTENCY_KEY_HEADER));
+          return { ...tenant, idempotencyKey };
+        }
         return tenant;
       },
       { [TENANT_GUARD]: true },
     );
     const wrapped = withApiLog<O & { guard: typeof guard }, Context>(
       (request, input, context, tenant) =>
-        handler(request, input as ApiInput<O>, tenant as TenantRouteArgs, context),
+        handler(
+          request,
+          input as ApiInput<O>,
+          tenant as TenantRouteArgs & IdempotentArgs<O>,
+          context,
+        ),
       { ...options, guard } as O & { guard: typeof guard },
     );
     // Data of one organization must never sit in a shared cache, also on an error response (401, 403,

@@ -44,3 +44,26 @@ from `withTenantRoute` (`tenant-route.ts`) as `{ ctx, db }`; services take the `
   `src/test/README.md`.
 - **404:** throw `notFoundError()` from `src/lib/api-error.ts`. It is the only definition of the message, so a
   missing row and another organization's row produce byte-identical bodies.
+
+## Idempotency-Key (BL14, ADR 0012)
+
+Stock writes are safe to retry. `idempotency.ts` holds `parseIdempotencyKey`, `runIdempotent` and `markReplayed`;
+`withTenantRoute({ idempotent: true })` reads the header and gives the handler `tenant.idempotencyKey`.
+
+```ts
+authorize(ctx, "stock.receive", { warehouseId }); // 1. ALWAYS first: never replay to a caller who may not act
+const { result, replayed } = await runIdempotent(
+  db,
+  { key: tenant.idempotencyKey, endpoint: "POST /api/stock/receive" },
+  {
+    work: async (tx) => (await tx.stockMovement.create({ data })).id, // 2. the effect; returns the new resource ID
+    load: (db, id) => loadMovement(db, id), // 3. the response is built from this, first call and replay
+    access: { ctx, action: "stock.receive", warehouseIdOf: (row) => row.warehouseId }, // 4. replay is authorized again; 404 if not
+  },
+);
+return markReplayed(Response.json(body(result), { status: 201 }), replayed);
+```
+
+- The key row is the last statement of the transaction; a duplicate rolls back `work` and replays the first result.
+- `endpoint` is a constant chosen by the handler, never taken from the URL (no IDs in the key).
+- Register the endpoint with `idempotent: true`; see `src/test/README.md`.

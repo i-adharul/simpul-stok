@@ -131,3 +131,33 @@ export function allowedRolesProblems(
   }
   return problems;
 }
+
+// Stock writes must opt in to the Idempotency-Key wrapper, so a new endpoint cannot forget it (BL14).
+// The prefixes are route folders below src/app/api: stock/receive, stock/adjust, stock/transfers,
+// transfers..., imports/[id]/commit.
+const IDEMPOTENT_ROUTE_PREFIXES = ["stock/", "transfers", "imports"];
+
+export function idempotencyProblems(
+  endpoints: { name: string; route: string; method: string; idempotent?: true }[],
+  exempt: Record<string, string>,
+): string[] {
+  const problems: string[] = [];
+  for (const [name, reason] of Object.entries(exempt)) {
+    if (reason.trim() === "") problems.push(`IDEMPOTENCY_EXEMPT "${name}" has no reason`);
+  }
+  for (const endpoint of endpoints) {
+    const writes = endpoint.method !== "GET";
+    const stockWrite = IDEMPOTENT_ROUTE_PREFIXES.some((prefix) =>
+      endpoint.route.startsWith(prefix),
+    );
+    if (endpoint.idempotent && !writes) {
+      problems.push(`${endpoint.name}: idempotent is set on a GET; only writes take a key`);
+    }
+    if (writes && stockWrite && !endpoint.idempotent && !(endpoint.name in exempt)) {
+      problems.push(
+        `${endpoint.name}: a stock write must be idempotent: true (withTenantRoute option and registry entry), or be listed in IDEMPOTENCY_EXEMPT with a reason`,
+      );
+    }
+  }
+  return problems;
+}

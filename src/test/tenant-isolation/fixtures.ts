@@ -122,12 +122,14 @@ export type CallOptions = {
   cookie?: string;
   body?: unknown;
   params?: Record<string, string>;
+  // Extra request headers, for example Idempotency-Key.
+  headers?: Record<string, string>;
 };
 
 // No HTTP server: the exported Route Handler is called with a Request. The proxy (CSRF) does not run
 // in this setup, but the same-origin Origin header is still sent so the request looks like the app's.
 export async function callRoute(handler: RouteHandler, options: CallOptions): Promise<Response> {
-  const headers: Record<string, string> = { origin: "http://localhost" };
+  const headers: Record<string, string> = { origin: "http://localhost", ...options.headers };
   if (options.cookie) headers.cookie = options.cookie;
   if (options.body !== undefined) headers["content-type"] = "application/json";
   const request = new Request(`http://localhost${options.path}`, {

@@ -42,6 +42,10 @@ type Common = {
   // Always rolesFor(action). Every other tenant role must get 403, before the existence of the row is
   // checked.
   allowedRoles: readonly TenantRole[];
+  // true when the route is built with withTenantRoute({ idempotent: true }) (BL14, ADR 0012). The
+  // harness then proves a write without a valid Idempotency-Key gets 400, and sends a fresh key on
+  // every other request. inventory.test.ts requires it on every stock write endpoint.
+  idempotent?: true;
 };
 
 // An endpoint addressed by the ID of one row: GET/PATCH/PUT/DELETE /api/x/[id], POST /api/x/[id]/cancel.
