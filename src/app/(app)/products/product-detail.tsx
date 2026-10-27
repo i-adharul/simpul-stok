@@ -11,13 +11,15 @@ import { LoadingSkeleton } from "@/components/states/loading-skeleton";
 import { fetchMe, ME_QUERY_KEY } from "@/components/app-shell/shell-user";
 import { ApiError } from "@/lib/api-client";
 import { formatDateWib, formatNumber } from "@/lib/format";
+import { MovementHistorySection } from "../movements/movement-history-section";
+import { StockSection } from "../stock/stock-section";
 import { AdjustStockButton } from "../stock/stock-adjust-dialog";
 import { ReceiveStockButton } from "../stock/stock-receive-dialog";
 import { ProductArchiveDialog } from "./product-archive-dialog";
 import { ProductFormDialog } from "./product-form-dialog";
 import { fetchProduct, productKey, type Product } from "./product-api";
 
-// S08 (shell). Basic info only; the stock and history sections arrive with E4-09.
+// S08. Info, stock per warehouse and recent history of the product.
 export function ProductDetail({ id }: { id: string }) {
   const me = useQuery({ queryKey: ME_QUERY_KEY, queryFn: fetchMe, retry: false });
   const query = useQuery({
@@ -97,12 +99,8 @@ function Body({ product, canManage }: { product: Product; canManage: boolean }) 
         ))}
       </dl>
 
-      <section className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-        Stok produk per gudang akan tampil di sini.
-      </section>
-      <section className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-        Riwayat mutasi produk akan tampil di sini.
-      </section>
+      <StockSection productId={product.id} />
+      <MovementHistorySection productId={product.id} />
 
       {canManage && (
         <>

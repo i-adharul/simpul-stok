@@ -96,7 +96,12 @@ export type StockPage = {
   pageSize: number;
   summary: { out: number; low: number; ok: number };
 };
-export type StockFilters = { warehouseId: string; q: string; status: StockStatus | "" };
+export type StockFilters = {
+  warehouseId: string;
+  q: string;
+  status: StockStatus | "";
+  productId?: string;
+};
 export const STOCK_PAGE_SIZE = 20;
 
 export function fetchStockPage(filters: StockFilters, page: number) {

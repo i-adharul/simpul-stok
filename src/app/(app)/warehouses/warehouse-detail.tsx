@@ -10,6 +10,8 @@ import { ErrorBanner } from "@/components/states/error-banner";
 import { LoadingSkeleton } from "@/components/states/loading-skeleton";
 import { fetchMe, ME_QUERY_KEY } from "@/components/app-shell/shell-user";
 import { ApiError } from "@/lib/api-client";
+import { MovementHistorySection } from "../movements/movement-history-section";
+import { StockSection } from "../stock/stock-section";
 import { AdjustStockButton } from "../stock/stock-adjust-dialog";
 import { ReceiveStockButton } from "../stock/stock-receive-dialog";
 import { WarehouseArchiveDialog } from "./warehouse-archive-dialog";
@@ -22,7 +24,7 @@ import {
   type WarehouseDetail as Detail,
 } from "./warehouse-api";
 
-// S06 (shell). Info and assigned users only; the stock and history sections arrive with E4-09.
+// S06. Info, assigned users, stock of the warehouse and its recent history.
 export function WarehouseDetail({ id }: { id: string }) {
   const me = useQuery({ queryKey: ME_QUERY_KEY, queryFn: fetchMe, retry: false });
   const query = useQuery({
@@ -114,12 +116,8 @@ function Body({ warehouse, canManage }: { warehouse: Detail; canManage: boolean 
         )}
       </section>
 
-      <section className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-        Stok gudang akan tampil di sini.
-      </section>
-      <section className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-        Riwayat mutasi gudang akan tampil di sini.
-      </section>
+      <StockSection warehouseId={warehouse.id} />
+      <MovementHistorySection warehouseId={warehouse.id} />
 
       {canManage && (
         <>
