@@ -111,7 +111,8 @@ access. Only the last layer talks to Prisma.
    Prisma CLI runs outside the app and must not need every app variable; `src/instrumentation.ts`
    reads `NEXT_RUNTIME`, a marker set by the framework, not app configuration; the Vitest
    `src/test/global-setup.ts` only writes `process.env.DATABASE_URL`, so the Prisma CLI migrates the
-   test database.
+   test database; `e2e/load-env.ts`, `e2e/global-setup.ts` and `playwright.config.ts` read or write
+   `process.env` because they run outside the app (like `vitest.config.mts` and `prisma.config.ts`).
 6. Every stock change runs inside one `prisma.$transaction`. Decrements use a conditional
    atomic update (`updateMany` with `quantity >= amount`). Multi-row updates are ordered by
    `(warehouseId, productId)` to avoid deadlocks. The database `CHECK (quantity >= 0)` is the last safety net.

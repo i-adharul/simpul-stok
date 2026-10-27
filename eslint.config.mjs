@@ -44,6 +44,7 @@ const PLAIN_CLIENT_ALLOWLIST = [
     files: [
       "prisma/seed.ts",
       "prisma/seed-demo.ts",
+      // demo-seed.ts: bootstrap lookups of the organization, owner and user ids (no session exists).
       "prisma/demo-seed.ts",
       "src/modules/platform/seed.ts",
     ],

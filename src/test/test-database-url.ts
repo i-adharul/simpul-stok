@@ -1,3 +1,5 @@
+import { isLocalDatabase } from "../modules/platform/seed";
+
 // Kept apart from test-database.ts because it must load without the generated Prisma client:
 // the Playwright config (CommonJS) imports it.
 // Tests truncate tables. This guard is the only thing standing between a typo in
@@ -15,4 +17,16 @@ export function assertTestDatabaseUrl(url: string | undefined): string {
     );
   }
   return url;
+}
+
+// The e2e run truncates every table, so besides the name it also requires a database on this machine:
+// a remote database that happens to be called "*_test" must never be emptied.
+export function assertLocalTestDatabaseUrl(url: string | undefined): string {
+  const checked = assertTestDatabaseUrl(url);
+  if (!isLocalDatabase(checked)) {
+    throw new Error(
+      "Refusing to run e2e: TEST_DATABASE_URL must point to a database on this machine.",
+    );
+  }
+  return checked;
 }
