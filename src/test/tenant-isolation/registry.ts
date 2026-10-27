@@ -350,6 +350,19 @@ export const TENANT_ENDPOINTS: TenantEndpoint[] = [
       ),
   },
   {
+    kind: "list",
+    name: "GET /api/dashboard",
+    route: "dashboard",
+    method: "GET",
+    module: () => import("@/app/api/dashboard/route"),
+    action: "stock.read",
+    allowedRoles: rolesFor("stock.read"),
+    path: "/api/dashboard",
+    createRow: createMovementRow,
+    // The only rows the dashboard lists are the latest movements.
+    idsOf: (json) => (json as { recentActivity: { id: string }[] }).recentActivity.map((r) => r.id),
+  },
+  {
     kind: "item",
     name: "GET /api/stock/movements/[id]",
     route: "stock/movements/[id]",
