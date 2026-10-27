@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "../../generated/prisma/client";
 import { env } from "../../lib/env";
 import { assertTestDatabaseUrl, createTestPrisma } from "../../test/test-database";
@@ -21,7 +21,11 @@ beforeAll(() => {
   prisma = createTestPrisma(assertTestDatabaseUrl(env.TEST_DATABASE_URL));
 });
 afterAll(() => prisma.$disconnect());
+afterEach(() => vi.useRealTimers());
 beforeEach(async () => {
+  // Freeze Date at the current instant: "today in WIB" is then the same for the test and the route, even if
+  // the run crosses 00:00 WIB. Only Date is faked, so database timeouts keep working.
+  vi.useFakeTimers({ toFake: ["Date"], now: new Date() });
   vi.spyOn(console, "info").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
   t = await createTwoTenants(prisma);

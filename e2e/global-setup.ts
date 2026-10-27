@@ -1,10 +1,11 @@
 import { spawnSync } from "node:child_process";
+import type { FullConfig } from "@playwright/test";
 import pg from "pg";
 import { testDatabaseUrl } from "./test-database";
 
 // Runs once before the scenarios: empty every table of the test database, then seed the demo data.
 // Migrations are not run here: `pnpm test` (Vitest) migrates simpul_test; if tables are missing, run it once.
-export default async function globalSetup() {
+export default async function globalSetup(config: FullConfig) {
   const client = new pg.Client({ connectionString: testDatabaseUrl });
   try {
     await client.connect();
@@ -27,5 +28,16 @@ export default async function globalSetup() {
   });
   if (seed.status !== 0) {
     throw new Error(`Demo seed failed:\n${seed.stdout}${seed.stderr}`);
+  }
+
+  await warmUp(config.projects[0]?.use.baseURL);
+}
+
+// The web server is already running here. `next dev` compiles a route on its first request, which made the
+// first scenario time out; request the pages and the login endpoint once, so the scenarios hit compiled code.
+async function warmUp(baseURL: string | undefined) {
+  if (!baseURL) return;
+  for (const path of ["/login", "/api/me", "/dashboard", "/stock", "/transfers/new"]) {
+    await fetch(`${baseURL}${path}`, { redirect: "manual" }).catch(() => {});
   }
 }
