@@ -1,10 +1,11 @@
 # Log in first with http/auth.http (Owner or Warehouse Admin), then run these in the same VS Code session.
-# Replace the two ids with real ones from GET /api/warehouses and GET /api/products.
+# Replace the ids with real ones from GET /api/warehouses, GET /api/stock/transfers/destinations and GET /api/products.
 # Every write needs an Origin header equal to the server's own scheme and host, and an Idempotency-Key
 # (a UUID; the client makes a new one each time a form is opened).
 
 @warehouseId = 00000000-0000-7000-8000-000000000001
 @productId = 00000000-0000-7000-8000-000000000002
+@toWarehouseId = 00000000-0000-7000-8000-000000000003
 
 ### Receive stock
 # Expect 201 { id, warehouseId, productId, quantity: 24, createdAt } (never the current stock)
@@ -110,3 +111,54 @@ GET http://localhost:3000/api/stock?warehouseId={{warehouseId}}&status=LOW&q=kop
 ### Stock summary with a bad status
 # Expect 400 VALIDATION_ERROR
 GET http://localhost:3000/api/stock?status=EMPTY
+
+### Transfer stock between warehouses (BL13)
+# Expect 201 { id, code: "MT-0001", fromWarehouseId, toWarehouseId, items: [{ productId, quantity }], note, createdAt }
+# (never the current stock). The destination may be any active warehouse; the source must be yours.
+POST http://localhost:3000/api/stock/transfers
+Origin: http://localhost:3000
+Content-Type: application/json
+Idempotency-Key: 7a2e3d2f-4c1b-4d66-8d2b-1a8e4c0b2f01
+
+{
+  "fromWarehouseId": "{{warehouseId}}",
+  "toWarehouseId": "{{toWarehouseId}}",
+  "items": [{ "productId": "{{productId}}", "quantity": 5 }],
+  "note": "Isi ulang gudang cabang"
+}
+
+### Same key again (a retry)
+# Expect 201 with the identical body and Idempotency-Replayed: true; stock moves once
+POST http://localhost:3000/api/stock/transfers
+Origin: http://localhost:3000
+Content-Type: application/json
+Idempotency-Key: 7a2e3d2f-4c1b-4d66-8d2b-1a8e4c0b2f01
+
+{
+  "fromWarehouseId": "{{warehouseId}}",
+  "toWarehouseId": "{{toWarehouseId}}",
+  "items": [{ "productId": "{{productId}}", "quantity": 5 }],
+  "note": "Isi ulang gudang cabang"
+}
+
+### Same source and destination
+# Expect 400 VALIDATION_ERROR (toWarehouseId must differ from fromWarehouseId)
+POST http://localhost:3000/api/stock/transfers
+Origin: http://localhost:3000
+Content-Type: application/json
+Idempotency-Key: 7a2e3d2f-4c1b-4d66-8d2b-1a8e4c0b2f02
+
+{ "fromWarehouseId": "{{warehouseId}}", "toWarehouseId": "{{warehouseId}}", "items": [{ "productId": "{{productId}}", "quantity": 1 }] }
+
+### More than the source holds
+# Expect 409 INSUFFICIENT_STOCK with details { productId }
+POST http://localhost:3000/api/stock/transfers
+Origin: http://localhost:3000
+Content-Type: application/json
+Idempotency-Key: 7a2e3d2f-4c1b-4d66-8d2b-1a8e4c0b2f03
+
+{ "fromWarehouseId": "{{warehouseId}}", "toWarehouseId": "{{toWarehouseId}}", "items": [{ "productId": "{{productId}}", "quantity": 1000000 }] }
+
+### Destinations for the transfer form
+# Expect 200 { items: [{ id, code, name }] } with every active warehouse (Owner and Warehouse Admin; a Viewer gets 403)
+GET http://localhost:3000/api/stock/transfers/destinations

@@ -11,6 +11,7 @@ export const ACTIONS = [
   "product.manage",
   "member.manage",
   "subscription.manage",
+  "transfer.destinations",
   // Warehouse-level (need resource.warehouseId)
   "stock.read",
   "history.read",
@@ -31,6 +32,7 @@ export const ORGANIZATION_ACTIONS = [
   "product.manage",
   "member.manage",
   "subscription.manage",
+  "transfer.destinations",
 ] as const satisfies readonly Action[];
 export type OrganizationAction = (typeof ORGANIZATION_ACTIONS)[number];
 
@@ -42,6 +44,9 @@ export type Resource = { warehouseId?: string };
 type Role = RequestContext["role"];
 
 const ORG_READ: ReadonlySet<Action> = new Set(["warehouse.read", "product.read"]);
+// BL13: the destination of a transfer may be any active warehouse, so choosing one is an organization-level
+// right of the roles that may transfer at all (a Viewer never transfers).
+const TRANSFER_PICKER: ReadonlySet<Action> = new Set(["transfer.destinations"]);
 const WAREHOUSE_READ: ReadonlySet<Action> = new Set(["stock.read", "history.read"]);
 const WAREHOUSE_WRITE: ReadonlySet<Action> = new Set([
   "stock.receive",
@@ -55,7 +60,12 @@ function roleAllows(role: Role, action: Action): boolean {
     case "OWNER":
       return true;
     case "WAREHOUSE_ADMIN":
-      return ORG_READ.has(action) || WAREHOUSE_READ.has(action) || WAREHOUSE_WRITE.has(action);
+      return (
+        ORG_READ.has(action) ||
+        TRANSFER_PICKER.has(action) ||
+        WAREHOUSE_READ.has(action) ||
+        WAREHOUSE_WRITE.has(action)
+      );
     case "VIEWER":
       return ORG_READ.has(action) || WAREHOUSE_READ.has(action);
     default:

@@ -43,6 +43,17 @@ export async function loadTransfer(db: TenantClient, id: string) {
 }
 export type TransferResponse = Awaited<ReturnType<typeof loadTransfer>>;
 
+// BL13: the destination may be ANY active warehouse of the organization, not only the assigned ones, so
+// this is not GET /api/warehouses. Only what the picker shows; the tenant client scopes the organization.
+export async function listTransferDestinations(db: TenantClient) {
+  const items = await db.warehouse.findMany({
+    where: { archivedAt: null },
+    select: { id: true, code: true, name: true },
+    orderBy: [{ code: "asc" }, { id: "asc" }],
+  });
+  return { items };
+}
+
 // BL13. The caller (route handler) has already called authorize(stock.transfer) for the SOURCE warehouse
 // (ADR 0012). The lookups turn a foreign or missing warehouse or product into 404 (rule 2); the tenant
 // client does not check foreign keys. includeArchived: the archived check belongs inside the transaction.

@@ -74,6 +74,7 @@ async function send(
   const handler = (await endpoint.module())[endpoint.method] as RouteHandler | undefined;
   if (!handler)
     throw new Error(`${endpoint.name}: the route module does not export ${endpoint.method}`);
+  if (endpoint.kind === "create") await endpoint.arrange?.(tenants);
   const cookie = caller.userId ? await cookieFor(caller.userId) : undefined;
   const key = "idempotencyKey" in options ? options.idempotencyKey : randomUUID();
   const headers =
@@ -320,6 +321,7 @@ export const CHECKS: Check[] = [
         await endpoint.countRows(tenants.prisma, tenants.b.organizationId),
         (await endpoint.readRow?.(tenants.prisma, tenants)) ?? null,
       ]);
+    await endpoint.arrange?.(tenants);
     const before = await snapshot();
     for (const role of endpoint.allowedRoles) {
       for (const variant of endpoint.foreignBodies?.(tenants) ?? []) {

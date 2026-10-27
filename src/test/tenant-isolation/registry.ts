@@ -104,6 +104,9 @@ export type CreateEndpoint = Common & {
   // Optional: the state the endpoint could change that countRows does not see (for example the stock
   // quantity of a (warehouse, product) pair in both organizations), to prove nothing was written.
   readRow?: (prisma: PrismaClient, tenants: TwoTenants) => Promise<Record<string, unknown>>;
+  // Optional: puts the data in place that makes the valid body succeed (for example enough stock at the
+  // source of a transfer). Must be idempotent: the harness runs it before every request.
+  arrange?: (tenants: TwoTenants) => Promise<void>;
 };
 
 export type TenantEndpoint = ItemEndpoint | ListEndpoint | CreateEndpoint;
@@ -235,6 +238,46 @@ const readStockPairs = async (prisma: PrismaClient, t: TwoTenants) => {
     )?.quantity ?? null;
   return { a: await quantityOf(t.a), b: await quantityOf(t.b) };
 };
+
+// The stock of the transfer pair: product of each organization in both of its warehouses.
+const readTransferPairs = async (prisma: PrismaClient, t: TwoTenants) => {
+  const quantityOf = async (warehouseId: string, productId: string) =>
+    (
+      await prisma.stockLevel.findUnique({
+        where: { warehouseId_productId: { warehouseId, productId } },
+      })
+    )?.quantity ?? null;
+  const snapshot: Record<string, number | null> = {};
+  for (const key of ["a", "b"] as const) {
+    snapshot[`${key}:source`] = await quantityOf(t[key].warehouseId, t[key].productId);
+    snapshot[`${key}:destination`] = await quantityOf(t[key].secondWarehouseId, t[key].productId);
+  }
+  return snapshot;
+};
+
+// The source of a transfer needs stock for the valid body to succeed. Setting (not adding) keeps this
+// idempotent, so the harness can run it before every request.
+const arrangeTransferStock = async (t: TwoTenants) => {
+  await t.prisma.stockLevel.upsert({
+    where: { warehouseId_productId: { warehouseId: t.a.warehouseId, productId: t.a.productId } },
+    create: {
+      organizationId: t.a.organizationId,
+      warehouseId: t.a.warehouseId,
+      productId: t.a.productId,
+      quantity: 1000,
+    },
+    update: { quantity: 1000 },
+  });
+};
+
+const transferBody = (
+  t: TwoTenants,
+  overrides: { fromWarehouseId?: string; toWarehouseId?: string; productId?: string } = {},
+) => ({
+  fromWarehouseId: overrides.fromWarehouseId ?? t.a.warehouseId,
+  toWarehouseId: overrides.toWarehouseId ?? t.a.secondWarehouseId,
+  items: [{ productId: overrides.productId ?? t.a.productId, quantity: 2 }],
+});
 
 // A history row in the organization's own warehouse (assigned to every role) and product.
 const createMovementRow = async (t: TwoTenants, owner: TenantKey) =>
@@ -496,5 +539,56 @@ export const TENANT_ENDPOINTS: TenantEndpoint[] = [
         status: 404,
       },
     ],
+  },
+  {
+    kind: "create",
+    name: "POST /api/stock/transfers",
+    route: "stock/transfers",
+    method: "POST",
+    module: () => import("@/app/api/stock/transfers/route"),
+    action: "stock.transfer",
+    allowedRoles: rolesFor("stock.transfer"),
+    idempotent: true,
+    path: "/api/stock/transfers",
+    body: (t) => transferBody(t),
+    countRows: (prisma, organizationId) =>
+      prisma.stockTransfer.count({ where: { organizationId } }),
+    readRow: readTransferPairs,
+    arrange: arrangeTransferStock,
+    // The source is authorized against ctx.warehouseIds first (403 for B's and a missing one); the
+    // destination and the product are looked up (404 for B's and a missing one).
+    foreignBodies: (t) => [
+      {
+        name: "source warehouse of B",
+        body: transferBody(t, { fromWarehouseId: t.b.warehouseId }),
+        missingBody: transferBody(t, { fromWarehouseId: randomUUID() }),
+        status: 403,
+      },
+      {
+        name: "destination warehouse of B",
+        body: transferBody(t, { toWarehouseId: t.b.secondWarehouseId }),
+        missingBody: transferBody(t, { toWarehouseId: randomUUID() }),
+        status: 404,
+      },
+      {
+        name: "product of B",
+        body: transferBody(t, { productId: t.b.productId }),
+        missingBody: transferBody(t, { productId: randomUUID() }),
+        status: 404,
+      },
+    ],
+  },
+  {
+    kind: "list",
+    name: "GET /api/stock/transfers/destinations",
+    route: "stock/transfers/destinations",
+    method: "GET",
+    module: () => import("@/app/api/stock/transfers/destinations/route"),
+    action: "transfer.destinations",
+    allowedRoles: rolesFor("transfer.destinations"),
+    path: "/api/stock/transfers/destinations",
+    // Not assigned to anyone: the list must still show it to a Warehouse Admin (BL13).
+    createRow: createWarehouseRow,
+    idsOf: (json) => (json as { items: { id: string }[] }).items.map((row) => row.id),
   },
 ];
