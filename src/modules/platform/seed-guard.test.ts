@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { SEED_ALLOW_REMOTE_VALUE, assertSeedTarget } from "./seed";
+import {
+  SEED_ALLOW_REMOTE_VALUE,
+  assertSeedTarget,
+  isLocalDatabase,
+  resolveDemoPassword,
+} from "./seed";
 
 const local = (host: string) => `postgresql://simpul:secret-pw@${host}:5433/simpul_dev`;
 const neon =
@@ -97,5 +102,31 @@ describe("assertSeedTarget", () => {
         /SEED_ALLOW_REMOTE/,
       );
     }
+  });
+});
+
+describe("resolveDemoPassword (demo seed, E6-03)", () => {
+  it("keeps the committed local passwords on a local database", () => {
+    expect(resolveDemoPassword(local("localhost"), undefined)).toBeUndefined();
+    expect(resolveDemoPassword(local("127.0.0.1"), "ignored-pass-1")).toBeUndefined();
+  });
+
+  it("refuses a remote database without DEMO_PASSWORD", () => {
+    expect(() => resolveDemoPassword(neon, undefined)).toThrow(/DEMO_PASSWORD/);
+    expect(() => resolveDemoPassword(neon, "")).toThrow(/DEMO_PASSWORD/);
+  });
+
+  it("uses DEMO_PASSWORD on a remote database when it follows the password rules", () => {
+    expect(resolveDemoPassword(neon, "remote-demo-pass-7")).toBe("remote-demo-pass-7");
+  });
+
+  it("rejects a weak DEMO_PASSWORD without echoing it", () => {
+    expect(() => resolveDemoPassword(neon, "short1")).toThrow(/password rules/);
+    expect(() => resolveDemoPassword(neon, "short1")).not.toThrow(/short1/);
+  });
+
+  it("treats an unparsable URL as not local", () => {
+    expect(isLocalDatabase("not a url")).toBe(false);
+    expect(isLocalDatabase(undefined)).toBe(false);
   });
 });
