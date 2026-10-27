@@ -164,8 +164,8 @@ export function idempotencyProblems(
 
 // Every foreign key in the body of a stock write needs its own foreignBodies variant, so a new endpoint (adjust,
 // transfer, import commit) or a new key (the destination warehouse) cannot slip past the check "foreign key of
-// another organization gets the same response as a missing one". A key is a body property that ends in "Id" and
-// holds a UUID. The variant must replace EXACTLY that key (the others stay valid) and its missingBody must
+// another organization gets the same response as a missing one". A key is a body property, at any depth (items[0].productId), that ends in
+// "Id" and holds a UUID. The variant must replace EXACTLY that key (the others stay valid) and its missingBody must
 // replace the same key with a different UUID.
 const UUID_VALUE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -180,23 +180,45 @@ type ForeignKeyEntry = {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const idKeysOf = (body: unknown): string[] =>
-  isRecord(body)
-    ? Object.entries(body)
-        .filter(
-          ([key, value]) =>
-            key.endsWith("Id") && typeof value === "string" && UUID_VALUE.test(value),
-        )
-        .map(([key]) => key)
-    : [];
+// Every leaf of a body with a path such as "items[0].productId", so a key inside an array or an object
+// counts too.
+function leavesOf(value: unknown, path = ""): Map<string, unknown> {
+  const leaves = new Map<string, unknown>();
+  if (Array.isArray(value)) {
+    value.forEach((item, i) => leavesOf(item, `${path}[${i}]`).forEach((v, k) => leaves.set(k, v)));
+  } else if (isRecord(value)) {
+    for (const [key, item] of Object.entries(value)) {
+      leavesOf(item, path === "" ? key : `${path}.${key}`).forEach((v, k) => leaves.set(k, v));
+    }
+  } else {
+    leaves.set(path, value);
+  }
+  return leaves;
+}
 
-// The keys whose value differs between two bodies.
-const changedKeys = (base: Record<string, unknown>, other: unknown): string[] =>
-  isRecord(other)
-    ? [...new Set([...Object.keys(base), ...Object.keys(other)])].filter(
-        (key) => JSON.stringify(base[key]) !== JSON.stringify(other[key]),
-      )
-    : ["(not an object)"];
+const lastSegment = (path: string) =>
+  path
+    .split(".")
+    .pop()
+    ?.replace(/\[\d+\]$/, "") ?? path;
+
+export const idKeysOf = (body: unknown): string[] =>
+  [...leavesOf(body)]
+    .filter(
+      ([path, value]) =>
+        lastSegment(path).endsWith("Id") && typeof value === "string" && UUID_VALUE.test(value),
+    )
+    .map(([path]) => path);
+
+// The paths whose value differs between two bodies.
+const changedKeys = (base: unknown, other: unknown): string[] => {
+  if (!isRecord(other)) return ["(not an object)"];
+  const x = leavesOf(base);
+  const y = leavesOf(other);
+  return [...new Set([...x.keys(), ...y.keys()])].filter(
+    (path) => JSON.stringify(x.get(path)) !== JSON.stringify(y.get(path)),
+  );
+};
 
 export function foreignKeyProblems(endpoints: ForeignKeyEntry[], tenants: unknown): string[] {
   const problems: string[] = [];
@@ -216,8 +238,8 @@ export function foreignKeyProblems(endpoints: ForeignKeyEntry[], tenants: unknow
     }
     const covered = new Set<string>();
     for (const variant of variants) {
-      const foreign = changedKeys(body as Record<string, unknown>, variant.body);
-      const missing = changedKeys(body as Record<string, unknown>, variant.missingBody);
+      const foreign = changedKeys(body, variant.body);
+      const missing = changedKeys(body, variant.missingBody);
       const key = foreign[0];
       if (foreign.length !== 1 || !keys.includes(key)) {
         problems.push(

@@ -95,6 +95,14 @@ describe("can: transfer", () => {
   });
 });
 
+describe("can: transfer.destinations", () => {
+  it("is held by the Owner and the Warehouse Admin, not by the Viewer", () => {
+    expect(can(ctxOf("OWNER"), "transfer.destinations")).toBe(true);
+    expect(can(ctxOf("WAREHOUSE_ADMIN"), "transfer.destinations")).toBe(true);
+    expect(can(ctxOf("VIEWER"), "transfer.destinations")).toBe(false);
+  });
+});
+
 describe("can: platform admin", () => {
   it("has no access to tenant data", () => {
     const platform = ctxOf("PLATFORM_ADMIN", [A]);

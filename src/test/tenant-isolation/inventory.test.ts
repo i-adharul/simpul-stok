@@ -14,8 +14,8 @@ import { TENANT_ENDPOINTS, rolesFor } from "./registry";
 // Ids shaped like UUIDs, so a body(t) can be read without a database.
 const id = (n: number) => `00000000-0000-7000-8000-${String(n).padStart(12, "0")}`;
 const fakeTenants = {
-  a: { warehouseId: id(1), productId: id(2), organizationId: id(3) },
-  b: { warehouseId: id(4), productId: id(5), organizationId: id(6) },
+  a: { warehouseId: id(1), secondWarehouseId: id(7), productId: id(2), organizationId: id(3) },
+  b: { warehouseId: id(4), secondWarehouseId: id(8), productId: id(5), organizationId: id(6) },
   unique: (prefix: string) => `${prefix}-1`,
 };
 
@@ -278,5 +278,46 @@ describe("foreignKeyProblems (synthetic entries)", () => {
   it("ignores reads and writes outside stock/, transfers and imports", () => {
     expect(foreignKeyProblems([entry(undefined, "warehouses")], fakeTenants)).toEqual([]);
     expect(foreignKeyProblems([{ ...entry(), method: "GET" }], fakeTenants)).toEqual([]);
+  });
+
+  it("walks into arrays: items[0].productId needs its own variant", () => {
+    const nested = (productId: string, from: string) => ({
+      fromWarehouseId: from,
+      items: [{ productId, quantity: 1 }],
+    });
+    const nestedEntry = (
+      foreignBodies?: (t: T) => { name: string; body: unknown; missingBody: unknown }[],
+    ) => ({
+      name: "POST /api/stock/transfers",
+      route: "stock/transfers",
+      method: "POST",
+      body: (t: T) => nested(t.a.productId, t.a.warehouseId),
+      foreignBodies: foreignBodies as never,
+    });
+    const fromVariant = (t: T) => ({
+      name: "source of B",
+      body: nested(t.a.productId, t.b.warehouseId),
+      missingBody: nested(t.a.productId, missingId),
+    });
+    const itemVariant = (t: T) => ({
+      name: "product of B",
+      body: nested(t.b.productId, t.a.warehouseId),
+      missingBody: nested(missingId, t.a.warehouseId),
+    });
+
+    expect(
+      foreignKeyProblems([nestedEntry((t) => [fromVariant(t), itemVariant(t)])], fakeTenants),
+    ).toEqual([]);
+    expect(foreignKeyProblems([nestedEntry((t) => [fromVariant(t)])], fakeTenants)).toEqual([
+      expect.stringContaining('the id key "items[0].productId" has no foreignBodies variant'),
+    ]);
+    // A variant that swaps the nested key AND another key is rejected.
+    const both2 = (t: T) => ({
+      ...itemVariant(t),
+      body: nested(t.b.productId, t.b.warehouseId),
+    });
+    expect(
+      foreignKeyProblems([nestedEntry((t) => [fromVariant(t), both2(t)])], fakeTenants)[0],
+    ).toContain("must replace exactly one id key");
   });
 });

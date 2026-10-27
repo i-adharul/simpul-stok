@@ -23,6 +23,7 @@ const ALLOWED: Record<Role, Action[]> = {
   WAREHOUSE_ADMIN: [
     "warehouse.read",
     "product.read",
+    "transfer.destinations",
     "stock.read",
     "history.read",
     "stock.receive",

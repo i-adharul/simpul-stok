@@ -12,6 +12,8 @@ export type Tenant = {
   organizationId: string;
   users: Record<TenantRole, string>;
   warehouseId: string;
+  // W2: a second active warehouse that no Warehouse Admin or Viewer is assigned to (a transfer destination).
+  secondWarehouseId: string;
   productId: string;
   transferId: string;
 };
@@ -76,6 +78,7 @@ async function createTenant(prisma: PrismaClient, slug: string): Promise<Tenant>
     organizationId: org.id,
     users,
     warehouseId: warehouse.id,
+    secondWarehouseId: second.id,
     productId: product.id,
     transferId: transfer.id,
   };
