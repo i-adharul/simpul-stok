@@ -105,3 +105,22 @@ export type ListMovementsQuery = z.output<typeof listMovementsQuery>;
 
 // An id that is not a UUID is answered with 404 by the service, so the schema only requires a string.
 export const movementIdParams = z.object({ id: z.string() });
+
+// BL15/BL16 stock summary (E4-06). Offset pagination with a total, like the other lists.
+export const STOCK_STATUSES = ["OUT", "LOW", "OK"] as const;
+export type StockStatus = (typeof STOCK_STATUSES)[number];
+
+export const listStockQuery = z.object({
+  warehouseId: z.uuid().optional(),
+  productId: z.uuid().optional(),
+  q: z
+    .string()
+    .trim()
+    .max(100)
+    .transform((value) => value || undefined)
+    .optional(),
+  status: z.enum(STOCK_STATUSES).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+});
+export type ListStockQuery = z.output<typeof listStockQuery>;

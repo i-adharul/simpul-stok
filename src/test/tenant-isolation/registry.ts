@@ -257,7 +257,35 @@ const readMovementRow = async (prisma: PrismaClient, id: string): Promise<RowSna
   return row && { ...row };
 };
 
+// A stock row in the organization's own warehouse (assigned to every role) for a fresh product. The id
+// has the form warehouseId:productId, as the response holds no single row id.
+const createStockLevelRow = async (t: TwoTenants, owner: TenantKey) => {
+  const organizationId = t[owner].organizationId;
+  const product = await t.prisma.product.create({
+    data: { organizationId, sku: t.unique("STK").toUpperCase(), name: "stock row", unit: "pcs" },
+  });
+  await t.prisma.stockLevel.create({
+    data: { organizationId, warehouseId: t[owner].warehouseId, productId: product.id, quantity: 1 },
+  });
+  return `${t[owner].warehouseId}:${product.id}`;
+};
+
 export const TENANT_ENDPOINTS: TenantEndpoint[] = [
+  {
+    kind: "list",
+    name: "GET /api/stock",
+    route: "stock",
+    method: "GET",
+    module: () => import("@/app/api/stock/route"),
+    action: "stock.read",
+    allowedRoles: rolesFor("stock.read"),
+    path: "/api/stock",
+    createRow: createStockLevelRow,
+    idsOf: (json) =>
+      (json as { items: { warehouse: { id: string }; product: { id: string } }[] }).items.map(
+        (row) => `${row.warehouse.id}:${row.product.id}`,
+      ),
+  },
   {
     kind: "item",
     name: "GET /api/stock/movements/[id]",

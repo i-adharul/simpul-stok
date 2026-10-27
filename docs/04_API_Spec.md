@@ -114,6 +114,29 @@ Owner only (`member.manage`). Body: `{ "userIds": string[] }`: UUIDs, no duplica
 | 400    | `VALIDATION_ERROR`: wrong shape, duplicate or malformed IDs, more than 200, or a user that is inactive or not a Warehouse Admin or Viewer (generic message) |
 | 404    | `NOT_FOUND`: the warehouse is missing, archived or foreign, or any user ID is missing or belongs to another organization (the same body for both)           |
 
+## Stock summary (S09, BL15, BL16)
+
+### `GET /api/stock`
+
+Every role (`stock.read`). Lists one row per (warehouse, product) pair that **has a stock row**; a pair without a row is not returned (the UI draws that strip in S06 and S08). Only warehouses the caller may access are included (Owner: all active warehouses; others: the assigned ones).
+
+| Query         | Rule                                                                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `warehouseId` | optional UUID; authorized first (`403` for a warehouse the caller cannot access, the same body for a foreign and a missing id) |
+| `productId`   | optional UUID; a foreign or unknown product simply gives an empty list                                                         |
+| `q`           | optional, at most 100 characters; case-insensitive "contains" on the product SKU or name                                       |
+| `status`      | optional `OUT`, `LOW` or `OK`                                                                                                  |
+| `page`        | default 1                                                                                                                      |
+| `pageSize`    | default 20, at most 100                                                                                                        |
+
+Status of a pair uses the minimum of its own product: `OUT` when quantity is 0; `LOW` when quantity is above 0 and below `minStock`; `OK` when quantity is above 0 and at or above `minStock` (so `minStock` 0 or 1 is never `LOW`). Rows of archived products appear only while their quantity is above 0 (`product.archived: true`). Order: product name, warehouse code, then IDs.
+
+| Status | Body                                                                                                                                                                                                                                                                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 200    | `{ "items": [{ "warehouse": { "id", "code", "name" }, "product": { "id", "sku", "name", "unit", "minStock", "archived" }, "quantity", "status", "updatedAt" }], "total", "page", "pageSize", "summary": { "out", "low", "ok" } }`; `summary` counts the same filters except `status` |
+| 400    | `VALIDATION_ERROR`: a malformed ID, an unknown `status`, `page` below 1, or `pageSize` outside 1 to 100                                                                                                                                                                              |
+| 403    | `FORBIDDEN`: `warehouseId` is not accessible to the caller                                                                                                                                                                                                                           |
+
 ## Stock receipt (BL11)
 
 ### `POST /api/stock/receive`

@@ -98,3 +98,15 @@ GET http://localhost:3000/api/stock/movements?cursor=PASTE_NEXT_CURSOR
 # Expect 200 with warehouse, product, createdBy (id, name, role), transfer (or null). 404 for an unknown
 # id, another organization's id, or a warehouse the user is not assigned to.
 GET http://localhost:3000/api/stock/movements/{{movementId}}
+
+### Stock summary (all accessible warehouses)
+# Expect 200 { items: [{ warehouse, product, quantity, status, updatedAt }], total, page, pageSize, summary: { out, low, ok } }
+GET http://localhost:3000/api/stock?page=1&pageSize=20
+
+### Stock summary, low stock of one warehouse, searched
+# Expect 200 with only status LOW rows; summary still counts all three statuses. 403 if the warehouse is not yours.
+GET http://localhost:3000/api/stock?warehouseId={{warehouseId}}&status=LOW&q=kopi
+
+### Stock summary with a bad status
+# Expect 400 VALIDATION_ERROR
+GET http://localhost:3000/api/stock?status=EMPTY
