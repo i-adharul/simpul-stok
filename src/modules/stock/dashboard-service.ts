@@ -47,8 +47,9 @@ async function lowestByGap(
     .slice(0, LIST_SIZE);
 }
 
-// GET /api/dashboard (S04, BL16). Reads the database directly (no cache). Every figure is limited to
-// ctx.warehouseIds, so a Warehouse Admin or Viewer never sees numbers of other warehouses.
+// GET /api/dashboard (S04, BL16). Reads the database directly (no cache). Every figure except
+// totalProducts (organization-wide, active products) is limited to ctx.warehouseIds, so a Warehouse Admin
+// or Viewer never sees stock numbers of other warehouses. totalUnits also counts archived products' units.
 export async function getDashboard(db: TenantClient, ctx: RequestContext, now: Date = new Date()) {
   const inScope: Prisma.StockLevelWhereInput = { warehouseId: { in: ctx.warehouseIds } };
   // Archived products are not restocked, so they are left out of the status counts and the list.

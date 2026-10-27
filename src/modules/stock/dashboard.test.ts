@@ -107,14 +107,44 @@ describe("GET /api/dashboard", () => {
     await stocked(w1, 5, 2); // LOW
     await stocked(w2, 5, 9); // OK
     await stocked(w1, 5, 0, true); // archived, never counted as OUT
+    // Organization B has an OUT product, stock and a movement today; none of it may show up for A.
+    const other = await prisma.product.create({
+      data: {
+        organizationId: t.b.organizationId,
+        sku: "B-001",
+        name: "Other org",
+        unit: "pcs",
+        minStock: 5,
+      },
+    });
+    await prisma.stockLevel.create({
+      data: {
+        organizationId: t.b.organizationId,
+        warehouseId: t.b.warehouseId,
+        productId: other.id,
+        quantity: 0,
+      },
+    });
+    await prisma.stockMovement.create({
+      data: {
+        organizationId: t.b.organizationId,
+        warehouseId: t.b.warehouseId,
+        productId: other.id,
+        quantityDelta: 1,
+        type: "RECEIVE",
+        createdById: t.b.users.OWNER,
+      },
+    });
     const { json } = await get("OWNER");
     expect(json.summary).toMatchObject({
       totalProducts: 4,
       totalUnits: 11,
       lowCount: 1,
       outCount: 1,
+      movementsToday: 0,
     });
     expect(json.restock.total).toBe(2);
+    expect(json.recentActivity).toEqual([]);
   });
 
   it("lists the 5 lowest items by stock minus minimum, ties by ids", async () => {
@@ -141,7 +171,9 @@ describe("GET /api/dashboard", () => {
   it("counts movements since 00:00 WIB and shows the 5 latest", async () => {
     const p = await stocked(w1, 0, 1);
     const start = wibDayStart(new Date());
+    const nextDay = new Date(start.getTime() + 24 * 60 * 60 * 1000);
     await movement(w1, p.id, new Date(start.getTime() - 1000)); // yesterday in WIB
+    await movement(w1, p.id, nextDay); // 00:00 WIB tomorrow: the upper bound is exclusive
     for (let i = 0; i < 6; i++) await movement(w1, p.id, new Date(start.getTime() + i * 1000));
     const { json } = await get("OWNER");
     expect(json.summary.movementsToday).toBe(6);
@@ -171,5 +203,17 @@ describe("GET /api/dashboard", () => {
     const owner = (await get("OWNER")).json;
     expect(owner.summary).toMatchObject({ totalUnits: 1, lowCount: 1, outCount: 1 });
     expect(owner.recentActivity).toHaveLength(2);
+  });
+
+  it("gives a viewer the same scoped figures", async () => {
+    const p1 = await stocked(w1, 5, 1);
+    const p2 = await stocked(w2, 5, 0);
+    await movement(w1, p1.id, new Date());
+    await movement(w2, p2.id, new Date());
+    const viewer = await get("VIEWER");
+    expect(viewer.status).toBe(200);
+    expect(viewer.json.summary.totalUnits).toBeLessThanOrEqual(1);
+    expect(viewer.json.recentActivity.length).toBeLessThanOrEqual(1);
+    for (const a of viewer.json.recentActivity) expect(a.warehouse.id).toBe(w1);
   });
 });

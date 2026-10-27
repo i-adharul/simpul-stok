@@ -3,5 +3,6 @@
 ### Dashboard (S04)
 # Expect 200 { summary: { totalProducts, totalUnits, lowCount, outCount, movementsToday },
 #   restock: { items: up to 5, total }, recentActivity: up to 5 }.
-# Figures cover only the warehouses of the caller; "today" is the WIB calendar day.
+# totalProducts is organization-wide (active products). The other figures cover only the caller's
+#   warehouses (totalUnits includes archived products' units); "today" is the WIB calendar day.
 GET http://localhost:3000/api/dashboard
