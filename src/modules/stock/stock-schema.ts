@@ -51,6 +51,49 @@ export const adjustBody = z.discriminatedUnion("mode", [
 ]);
 export type AdjustBody = z.infer<typeof adjustBody>;
 
+// BL13: 1 to 50 items, each product at most once, quantity 1 to 1,000,000, and a different destination.
+// strictObject rejects organizationId (rule 1). Whether the warehouses and products exist and are active
+// is checked by the service, because it depends on data.
+export const MAX_TRANSFER_ITEMS = 50;
+export const MAX_TRANSFER_QUANTITY = 1_000_000;
+
+export const transferBody = z
+  .strictObject({
+    fromWarehouseId: z.uuid(),
+    toWarehouseId: z.uuid(),
+    items: z
+      .array(
+        z.strictObject({
+          productId: z.uuid(),
+          quantity: z.number().int().min(1).max(MAX_TRANSFER_QUANTITY),
+        }),
+      )
+      .min(1)
+      .max(MAX_TRANSFER_ITEMS),
+    note: note.optional(),
+  })
+  .superRefine((body, ctx) => {
+    if (body.fromWarehouseId === body.toWarehouseId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["toWarehouseId"],
+        message: "Gudang tujuan harus berbeda dari gudang asal.",
+      });
+    }
+    const seen = new Set<string>();
+    body.items.forEach((item, index) => {
+      if (seen.has(item.productId)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["items", index, "productId"],
+          message: "Produk tidak boleh muncul dua kali dalam satu mutasi.",
+        });
+      }
+      seen.add(item.productId);
+    });
+  });
+export type TransferBody = z.infer<typeof transferBody>;
+
 // BL16 history. Keyset (cursor) pagination, never offset (E4-07): one page is 50 rows. The cursor is
 // opaque to the client; it holds only the (createdAt, id) of the last row, never an organization.
 export const MOVEMENTS_PAGE_SIZE = 50;

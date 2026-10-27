@@ -94,7 +94,7 @@ async function receiveInTransaction(
 // StockLevel.quantity is a 32-bit INTEGER. An increment past its maximum makes Postgres raise 22003,
 // which Prisma reports as P2020 (verified in stock-receive.test.ts). Only that case becomes a 409;
 // every other error is passed on unchanged.
-async function addToLevel(
+export async function addToLevel(
   tx: TenantTransaction,
   warehouseId: string,
   productId: string,
