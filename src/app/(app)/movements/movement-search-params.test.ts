@@ -18,6 +18,11 @@ describe("parseMovementSearchParams", () => {
     ).toEqual({ warehouseId: "", productId: "", type: "" });
   });
 
+  it("rejects names inherited from Object.prototype as a type", () => {
+    expect(parseMovementSearchParams({ type: "constructor" }).type).toBe("");
+    expect(parseMovementSearchParams({ type: "__proto__" }).type).toBe("");
+  });
+
   it("uses the first value of a repeated parameter and ignores a missing one", () => {
     expect(parseMovementSearchParams({ warehouseId: [ID, "x"] })).toEqual({
       warehouseId: ID,

@@ -20,6 +20,6 @@ export function parseMovementSearchParams(
   return {
     productId: id("productId"),
     warehouseId: id("warehouseId"),
-    type: type && type in TYPE_LABEL ? type : "",
+    type: type && Object.hasOwn(TYPE_LABEL, type) ? type : "",
   };
 }
