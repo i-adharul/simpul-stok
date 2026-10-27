@@ -24,6 +24,7 @@ import {
   MOVEMENTS_QUERY_KEY,
   type MovementFilters,
 } from "./movement-api";
+import type { InitialMovementFilters } from "./movement-search-params";
 import { dayBoundsWib, formatDelta, TYPE_LABEL } from "./movement-labels";
 
 const selectClass = "h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm";
@@ -31,8 +32,8 @@ const NO_FILTER = { productId: "", warehouseId: "", type: "", from: "", to: "" }
 
 // S10. The server already narrows rows to the user's warehouses; the filters only narrow further.
 // Export (CSV and XLSX) arrives with E13 and is not offered here.
-export function MovementList() {
-  const [form, setForm] = useState(NO_FILTER);
+export function MovementList({ initial }: { initial?: InitialMovementFilters }) {
+  const [form, setForm] = useState({ ...NO_FILTER, ...initial });
   const [openId, setOpenId] = useState<string | null>(null);
   const filters: MovementFilters = {
     productId: form.productId,
