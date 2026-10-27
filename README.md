@@ -36,6 +36,10 @@ This is a product hypothesis for a portfolio, not yet validated with real users.
 | Tenant isolation                          | Automated tests across every endpoint (another tenant's IDs never resolve: 404, or the same 403 as a missing one) | Tested (see [Measured results](#measured-results)) |
 | Subscription and payment flow             | Webhook verification, duplicate-event handling, access freeze                                                     | Planned (M2)                                       |
 
+## Live demo
+
+[simpul-stok.vercel.app](https://simpul-stok.vercel.app) has demo data for three roles: Owner, Warehouse Admin and Viewer.
+
 ## Tech stack
 
 Next.js (App Router) · TypeScript (strict) · PostgreSQL (Neon) · Prisma · Zod ·
@@ -150,12 +154,12 @@ tests, so a regression fails CI. Three concurrency and atomicity files (31 tests
 
 ## Roadmap
 
-| Milestone | Scope                                                                          | Status                |
-| --------- | ------------------------------------------------------------------------------ | --------------------- |
-| M1        | Core inventory online: auth, warehouses, products, stock, transfers, dashboard | In progress (E6 next) |
-| M2        | SaaS: organizations, plans, Xendit sandbox billing, platform admin             | Planned               |
-| M3        | Extras: import/export, notifications, audit log, Row-Level Security            | Planned               |
-| M4        | Portfolio polish: demo data, docs, security review                             | Planned               |
+| Milestone | Scope                                                                          | Status  |
+| --------- | ------------------------------------------------------------------------------ | ------- |
+| M1        | Core inventory online: auth, warehouses, products, stock, transfers, dashboard | Done    |
+| M2        | SaaS: organizations, plans, Xendit sandbox billing, platform admin             | Next    |
+| M3        | Extras: import/export, notifications, audit log, Row-Level Security            | Planned |
+| M4        | Portfolio polish: demo data, docs, security review                             | Planned |
 
 ## Documentation
 

@@ -35,7 +35,7 @@ Next.js here is a recent major version. Follow `AGENTS.md` and read the bundled 
 ```
 src/
   app/                 Next.js routes, layouts and Route Handlers
-                       ((app)/transfers/: S11 create transfer, S12 transfer detail)
+                       ((app)/dashboard/: S04 dashboard; (app)/transfers/: S11 create transfer, S12 transfer detail)
   components/
     app-shell/         Sidebar, top bar and nav items
     session/           Session-expired dialog (P19)
