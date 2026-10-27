@@ -35,6 +35,7 @@ Next.js here is a recent major version. Follow `AGENTS.md` and read the bundled 
 ```
 src/
   app/                 Next.js routes, layouts and Route Handlers
+                       ((app)/transfers/: S11 create transfer, S12 transfer detail)
   components/
     app-shell/         Sidebar, top bar and nav items
     session/           Session-expired dialog (P19)
@@ -67,6 +68,7 @@ src/
     stock/             Warehouses, products, stock levels, movements, transfers
                        (warehouse-service/-schema, product-service/-schema, warehouse-members-service,
                        stock-service: receive, stock-adjust-service, stock-level-service, stock-status,
+                       stock-transfer-service: transfers, ADR 0014,
                        warehouse-lock: ADR 0013, lock-exemptions)
   test/                Test helpers and the tenant-isolation harness
   proxy.ts             Assigns the request ID and rejects cross-origin writes (CSRF) before routes run
