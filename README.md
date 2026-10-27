@@ -28,13 +28,13 @@ This is a product hypothesis for a portfolio, not yet validated with real users.
 
 ## What this project demonstrates
 
-| Capability                                | How it is proven                                                   | Status                                             |
-| ----------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------- |
-| No negative stock under concurrent access | Concurrency test: 20 simultaneous requests against a stock of 10   | Tested (see [Measured results](#measured-results)) |
-| Atomic transfers between warehouses       | Test that forces a failure mid-transfer and checks nothing changed | Tested (see [Measured results](#measured-results)) |
-| Idempotent requests                       | Unique idempotency key enforced in the database                    | Planned (M1)                                       |
-| Tenant isolation                          | Automated tests across every endpoint (404 for other tenants' IDs) | Planned (M1)                                       |
-| Subscription and payment flow             | Webhook verification, duplicate-event handling, access freeze      | Planned (M2)                                       |
+| Capability                                | How it is proven                                                                                                  | Status                                             |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| No negative stock under concurrent access | Concurrency test: 20 simultaneous requests against a stock of 10                                                  | Tested (see [Measured results](#measured-results)) |
+| Atomic transfers between warehouses       | Test that forces a failure mid-transfer and checks nothing changed                                                | Tested (see [Measured results](#measured-results)) |
+| Idempotent requests                       | Unique idempotency key enforced in the database                                                                   | Tested (see [Measured results](#measured-results)) |
+| Tenant isolation                          | Automated tests across every endpoint (another tenant's IDs never resolve: 404, or the same 403 as a missing one) | Tested (see [Measured results](#measured-results)) |
+| Subscription and payment flow             | Webhook verification, duplicate-event handling, access freeze                                                     | Planned (M2)                                       |
 
 ## Tech stack
 
@@ -102,20 +102,22 @@ Produced by `pnpm vitest run` against the real local Postgres (`simpul_test`); t
 tests, so a regression fails CI. Three concurrency and atomicity files (31 tests) were run 5 times in a row: all
 5 runs passed. Transfer cross-tenant and role checks: 12 of 12 harness tests passed.
 
-| Scenario                                                     | Result                                                                                                                            | Test                                                     |
-| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| 20 parallel transfers of 1 unit, source stock 10             | 10 succeeded, 10 failed (409 `INSUFFICIENT_STOCK`); source 0, destination 10; 20 movement rows (10 out, 10 in); no negative level | `stock-transfer-concurrency.test.ts`                     |
-| 40 opposite transfers (20 A to B, 20 B to A), 100 units each | 0 failures (no deadlock); 100 and 100 again (total 200); 40 transfers, 80 movement rows                                           | `stock-transfer-concurrency.test.ts`                     |
-| Failure after the source was decremented                     | Source unchanged, no transfer and no movement written; retry works after the fix                                                  | `stock-transfer-atomicity.test.ts`                       |
-| Last item of a transfer lacks stock                          | Earlier items unchanged                                                                                                           | `stock-transfer-atomicity.test.ts`                       |
-| 10 parallel adjustments of -1 on stock 6                     | 6 succeeded, rest 409, never negative                                                                                             | `stock-adjust.test.ts`                                   |
-| Transfer endpoints, other tenant or wrong role               | 404 for another organization's warehouse or product, 403 for a role without the right                                             | `tenant-isolation.test.ts`, `stock-transfer-api.test.ts` |
+| Scenario                                                     | Result                                                                                                                                                                | Test                                                                                                                                                 |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 20 parallel transfers of 1 unit, source stock 10             | 10 succeeded, 10 failed (409 `INSUFFICIENT_STOCK`); source 0, destination 10; 20 movement rows (10 out, 10 in); no negative level                                     | `stock-transfer-concurrency.test.ts`                                                                                                                 |
+| 40 opposite transfers (20 A to B, 20 B to A), 100 units each | 0 failures (no deadlock); 100 and 100 again (total 200); 40 transfers, 80 movement rows                                                                               | `stock-transfer-concurrency.test.ts`                                                                                                                 |
+| Failure after the source was decremented                     | Source unchanged, no transfer and no movement written; retry works after the fix                                                                                      | `stock-transfer-atomicity.test.ts`                                                                                                                   |
+| Last item of a transfer lacks stock                          | Earlier items unchanged                                                                                                                                               | `stock-transfer-atomicity.test.ts`                                                                                                                   |
+| 10 parallel adjustments of -1 on stock 6                     | 6 succeeded, rest 409, never negative                                                                                                                                 | `stock-adjust.test.ts`                                                                                                                               |
+| Transfer endpoints, other tenant or wrong role               | 403 for another organization's source warehouse (authorized first), 404 for another organization's destination warehouse or product, 403 for a role without the right | `tenant-isolation.test.ts`, `stock-transfer-api.test.ts`                                                                                             |
+| Same `Idempotency-Key` sent again, also 5 at once            | One effect and the same result; the key in another organization is independent; a failed request leaves no key                                                        | [`idempotency.test.ts`](src/modules/platform/idempotency.test.ts)                                                                                    |
+| Every route.ts is covered by the tenant harness              | Each route is registered with its allowed roles, or listed as exempt or public with a reason; CI fails on a missing one                                               | [`tenant-isolation.test.ts`](src/test/tenant-isolation/tenant-isolation.test.ts), [`inventory.test.ts`](src/test/tenant-isolation/inventory.test.ts) |
 
 ## Roadmap
 
 | Milestone | Scope                                                                          | Status                |
 | --------- | ------------------------------------------------------------------------------ | --------------------- |
-| M1        | Core inventory online: auth, warehouses, products, stock, transfers, dashboard | In progress (E5 next) |
+| M1        | Core inventory online: auth, warehouses, products, stock, transfers, dashboard | In progress (E6 next) |
 | M2        | SaaS: organizations, plans, Xendit sandbox billing, platform admin             | Planned               |
 | M3        | Extras: import/export, notifications, audit log, Row-Level Security            | Planned               |
 | M4        | Portfolio polish: demo data, docs, security review                             | Planned               |
