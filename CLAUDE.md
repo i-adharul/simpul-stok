@@ -73,7 +73,8 @@ src/
   test/                Test helpers and the tenant-isolation harness
   proxy.ts             Assigns the request ID and rejects cross-origin writes (CSRF) before routes run
   instrumentation.ts   Imports lib/env at server start so bad config stops the app
-prisma/                Schema, migrations and seed
+prisma/                Schema, migrations, seed, and the demo seed (seed-demo.ts, demo-seed.ts, demo-data.ts)
+e2e/                   Playwright scenarios and global setup (resets and seeds simpul_test)
 prisma.config.ts       Prisma CLI config (loads .env, picks the database URL)
 http/                  Example requests per resource (`*.http`)
 docker/postgres-init/  SQL run when the local database volume is first created
@@ -150,7 +151,9 @@ pnpm test:watch         # re-run tests on change while developing
 pnpm format             # Prettier, write
 pnpm format:check       # Prettier, check only
 pnpm prisma migrate dev # create/apply migrations locally (never against Neon)
-pnpm prisma db seed     # demo data; refuses a non-local database (see SEED_ALLOW_REMOTE in .env.example)
+pnpm prisma db seed     # base data (plans, demo organization, accounts); refuses a non-local database (see SEED_ALLOW_REMOTE in .env.example)
+pnpm seed:demo          # demo warehouses, products and stock operations through the services; remote needs DEMO_PASSWORD
+pnpm test:e2e           # Playwright against simpul_test; do not run together with pnpm test (both use simpul_test)
 ```
 
 To rebuild the local database from scratch (this deletes local data): `docker compose down -v`,

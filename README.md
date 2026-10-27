@@ -56,6 +56,41 @@ pnpm prisma db seed
 pnpm dev
 ```
 
+## Demo data
+
+`pnpm prisma db seed` creates the plans, the organization "Toko Demo" (slug `demotoko`) and its accounts.
+`pnpm seed:demo` adds the demo content on top, through the real services (so the stock levels and the
+movement ledger always agree): 3 warehouses, 25 products, about 32 movements (receipts, 2 adjustments,
+3 transfers), some LOW and some OUT pairs on the dashboard. It can be run again: nothing is created twice.
+
+| Role            | Email                  | Password (local seed only) | Access                  |
+| --------------- | ---------------------- | -------------------------- | ----------------------- |
+| Owner           | `owner@demotoko.test`  | `owner-demo-2026`          | every warehouse         |
+| Warehouse Admin | `gudang@demotoko.test` | `gudang-demo-2026`         | Gudang Pusat Jakarta    |
+| Viewer          | `viewer@demotoko.test` | `viewer-demo-2026`         | Jakarta and Surabaya    |
+| Platform admin  | `admin@simpul.test`    | `platform-demo-2026`       | no organization (local) |
+
+These passwords are public in this repository. On a remote database `pnpm seed:demo` refuses to run
+without `DEMO_PASSWORD` (it replaces every demo password and no platform admin is created) and also needs
+`SEED_ALLOW_REMOTE`. Never run it against Neon from a story; that is a manual step.
+
+## End-to-end tests
+
+Playwright runs three scenarios in Chromium (login, receive stock, create a transfer) against the **test**
+database `simpul_test`. It refuses any database whose name does not end with `_test`.
+
+```bash
+docker compose up -d
+pnpm exec playwright install chromium   # once per machine
+pnpm test:e2e
+```
+
+- Each run empties `simpul_test` and seeds the demo data again, then starts `next dev` on port 3100.
+- `simpul_test` must already be migrated: `pnpm test` (Vitest) does that. Run it once on a fresh database.
+- Do **not** run `pnpm test:e2e` and `pnpm test` at the same time: both use `simpul_test`.
+- Traces and screenshots of a failed scenario are written to `test-results/` (gitignored).
+- There is no e2e job in CI yet; adding one is a separate change.
+
 ## Session secret
 
 `SESSION_SECRET` signs the login cookie (at least 32 characters). The app refuses to start with a shorter
