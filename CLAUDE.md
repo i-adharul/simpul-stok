@@ -73,7 +73,8 @@ src/
   test/                Test helpers and the tenant-isolation harness
   proxy.ts             Assigns the request ID and rejects cross-origin writes (CSRF) before routes run
   instrumentation.ts   Imports lib/env at server start so bad config stops the app
-prisma/                Schema, migrations and seed
+prisma/                Schema, migrations, seed, and the demo seed (seed-demo.ts, demo-seed.ts, demo-data.ts)
+e2e/                   Playwright scenarios and global setup (resets and seeds simpul_test)
 prisma.config.ts       Prisma CLI config (loads .env, picks the database URL)
 http/                  Example requests per resource (`*.http`)
 docker/postgres-init/  SQL run when the local database volume is first created
@@ -110,7 +111,8 @@ access. Only the last layer talks to Prisma.
    Prisma CLI runs outside the app and must not need every app variable; `src/instrumentation.ts`
    reads `NEXT_RUNTIME`, a marker set by the framework, not app configuration; the Vitest
    `src/test/global-setup.ts` only writes `process.env.DATABASE_URL`, so the Prisma CLI migrates the
-   test database.
+   test database; `e2e/load-env.ts`, `e2e/global-setup.ts` and `playwright.config.ts` read or write
+   `process.env` because they run outside the app (like `vitest.config.mts` and `prisma.config.ts`).
 6. Every stock change runs inside one `prisma.$transaction`. Decrements use a conditional
    atomic update (`updateMany` with `quantity >= amount`). Multi-row updates are ordered by
    `(warehouseId, productId)` to avoid deadlocks. The database `CHECK (quantity >= 0)` is the last safety net.
@@ -150,7 +152,9 @@ pnpm test:watch         # re-run tests on change while developing
 pnpm format             # Prettier, write
 pnpm format:check       # Prettier, check only
 pnpm prisma migrate dev # create/apply migrations locally (never against Neon)
-pnpm prisma db seed     # demo data; refuses a non-local database (see SEED_ALLOW_REMOTE in .env.example)
+pnpm prisma db seed     # base data (plans, demo organization, accounts); refuses a non-local database (see SEED_ALLOW_REMOTE in .env.example)
+pnpm seed:demo          # demo warehouses, products and stock operations through the services; remote needs DEMO_PASSWORD
+pnpm test:e2e           # Playwright against simpul_test; do not run together with pnpm test (both use simpul_test)
 ```
 
 To rebuild the local database from scratch (this deletes local data): `docker compose down -v`,

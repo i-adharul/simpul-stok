@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import type { PrismaClient, UserRole } from "../../generated/prisma/client";
+import { validatePassword } from "./password";
 
 // Demo data for development (story E0-07). It is a bootstrap script, so it uses the plain Prisma
 // client: the tenant-scoped client (CLAUDE.md rule 3) does not exist yet and a seed has no session.
@@ -93,6 +94,36 @@ export function assertSeedTarget(
   );
 }
 
+// True for a database on this machine. The demo seed (E6-03) uses it to decide whether the committed
+// local passwords are acceptable. A URL that cannot be parsed counts as NOT local.
+export function isLocalDatabase(databaseUrl: string | undefined): boolean {
+  const url = parseDatabaseUrl(databaseUrl);
+  return url !== null && LOCAL_HOSTS.has(url.hostname);
+}
+
+// The demo seed on a remote database must not use the passwords that are public in this repository.
+// Local: returns undefined (keep the committed passwords). Remote: DEMO_PASSWORD is required and must
+// follow the password rules for every demo account. Messages never contain the value.
+export function resolveDemoPassword(
+  databaseUrl: string | undefined,
+  demoPassword: string | undefined,
+): string | undefined {
+  if (isLocalDatabase(databaseUrl)) return undefined;
+  if (!demoPassword) {
+    throw new Error(
+      "Refusing to seed a remote database without DEMO_PASSWORD: the committed demo passwords are public.",
+    );
+  }
+  for (const account of DEMO_ACCOUNTS.filter((a) => a.inOrganization)) {
+    if (!validatePassword(demoPassword, account.email).ok) {
+      throw new Error(
+        "DEMO_PASSWORD does not follow the password rules (8 to 72 bytes, a letter and a digit, not a common password).",
+      );
+    }
+  }
+  return demoPassword;
+}
+
 function parseDatabaseUrl(value: string | undefined): URL | null {
   if (!value?.trim()) return null;
   try {
@@ -103,10 +134,18 @@ function parseDatabaseUrl(value: string | undefined): URL | null {
   }
 }
 
+export type SeedOptions = {
+  // Replaces every demo password and leaves out the platform admin (remote demo seed, E6-03).
+  password?: string;
+};
+
 // Runs in one transaction and can be repeated: every step is an upsert or a create-if-missing.
-export async function seedBase(prisma: PrismaClient): Promise<void> {
+export async function seedBase(prisma: PrismaClient, options: SeedOptions = {}): Promise<void> {
+  const accounts = options.password
+    ? DEMO_ACCOUNTS.filter((account) => account.inOrganization)
+    : DEMO_ACCOUNTS;
   // Hash outside the transaction: cost 12 is slow and would keep a connection busy.
-  const hashes = await hashPasswords();
+  const hashes = await hashPasswords(accounts, options.password);
 
   await prisma.$transaction(async (tx) => {
     const starter = await upsertPlans(tx);
@@ -116,7 +155,7 @@ export async function seedBase(prisma: PrismaClient): Promise<void> {
       create: { ...DEMO_ORGANIZATION, status: "TRIAL" },
     });
     await createSubscriptionIfMissing(tx, organization.id, starter.id);
-    for (const account of DEMO_ACCOUNTS) {
+    for (const account of accounts) {
       await createUserIfMissing(tx, account, organization.id, hashes.get(account.email)!);
     }
   });
@@ -124,9 +163,14 @@ export async function seedBase(prisma: PrismaClient): Promise<void> {
 
 type Tx = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
 
-async function hashPasswords(): Promise<Map<string, string>> {
+async function hashPasswords(
+  accounts: typeof DEMO_ACCOUNTS,
+  override?: string,
+): Promise<Map<string, string>> {
   const entries = await Promise.all(
-    DEMO_ACCOUNTS.map(async (a) => [a.email, await bcrypt.hash(a.password, BCRYPT_COST)] as const),
+    accounts.map(
+      async (a) => [a.email, await bcrypt.hash(override ?? a.password, BCRYPT_COST)] as const,
+    ),
   );
   return new Map(entries);
 }

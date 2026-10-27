@@ -27,6 +27,9 @@ const envSchema = z.object({
   TEST_DATABASE_URL: postgresUrl.optional(),
   // Only read by the seed (assertSeedTarget): lets it write demo accounts to a non-local database.
   SEED_ALLOW_REMOTE: z.string().optional(),
+  // Only read by the demo seed (`pnpm seed:demo`): the password of the demo accounts on a REMOTE
+  // database, where the committed local passwords must not be used. The seed checks the password rules.
+  DEMO_PASSWORD: z.string().max(72).optional(),
   // Set by Vercel on deploys when "Automatically expose System Environment Variables" is on.
   // Only the first 7 characters are shown, by GET /api/health.
   VERCEL_GIT_COMMIT_SHA: z.string().optional(),

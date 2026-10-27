@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { assertSameTestDatabase, assertTestDatabaseUrl } from "./test-database";
+import { assertLocalTestDatabaseUrl } from "./test-database-url";
 
 describe("assertTestDatabaseUrl", () => {
   it("accepts a database whose name ends with _test", () => {
@@ -58,5 +59,24 @@ describe("assertSameTestDatabase", () => {
     } catch (error) {
       expect((error as Error).message).not.toMatch(/secretpw/);
     }
+  });
+});
+
+describe("assertLocalTestDatabaseUrl", () => {
+  it("accepts a local database ending with _test", () => {
+    const url = "postgresql://simpul:simpul@localhost:5433/simpul_test";
+    expect(assertLocalTestDatabaseUrl(url)).toBe(url);
+  });
+
+  it("refuses a remote host even when the name ends with _test", () => {
+    expect(() =>
+      assertLocalTestDatabaseUrl("postgresql://simpul:pw@db.example.com:5432/simpul_test"),
+    ).toThrow(/on this machine/);
+  });
+
+  it("still refuses a local database with a wrong name", () => {
+    expect(() =>
+      assertLocalTestDatabaseUrl("postgresql://simpul:simpul@localhost:5433/simpul_dev"),
+    ).toThrow(/must end with "_test"/);
   });
 });

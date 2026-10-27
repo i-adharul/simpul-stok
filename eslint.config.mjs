@@ -41,7 +41,13 @@ const PLAIN_CLIENT_ALLOWLIST = [
   },
   { files: ["src/app/api/health/**"], reason: "health check, touches no tenant data" },
   {
-    files: ["prisma/seed.ts", "src/modules/platform/seed.ts"],
+    files: [
+      "prisma/seed.ts",
+      "prisma/seed-demo.ts",
+      // demo-seed.ts: bootstrap lookups of the organization, owner and user ids (no session exists).
+      "prisma/demo-seed.ts",
+      "src/modules/platform/seed.ts",
+    ],
     reason: "bootstrap script, has no session; refuses a non-local database",
   },
   {
