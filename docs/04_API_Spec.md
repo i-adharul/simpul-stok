@@ -2,7 +2,7 @@
 
 |          |                                                                                                                                                                          |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Version  | 2.1 (22 Oct 2026)                                                                                                                                                        |
+| Version  | 2.2 (27 Oct 2026)                                                                                                                                                        |
 | Purpose  | The list of REST endpoints, who may call them, and the general conventions                                                                                               |
 | Audience | People who build endpoints, clients, and API tests                                                                                                                       |
 | Related  | The rules for each endpoint are in `02_Functional_Spec.md` (BL); the error format is in BL29; the documentation is run through one `.http` file per resource in the repo |
@@ -25,6 +25,8 @@ REST through Next.js Route Handlers is the main path between the UI and the serv
 | Audit (1)                       | `GET /api/audit-logs`                                                                                                                                                                                                                   | Owner                                                                                                                                                                                    |
 | Platform (3)                    | `GET /api/platform/organizations`, `GET /api/platform/organizations/:id`, `PATCH /api/platform/organizations/:id/status`                                                                                                                | Platform admin                                                                                                                                                                           |
 | System (2)                      | `GET /api/cron/daily`, `GET /api/health`                                                                                                                                                                                                | Cron with a secret; health is public                                                                                                                                                     |
+
+Endpoints that exist in the code have their own section below, headed `METHOD /path` (`src/test/api-docs.test.ts` fails when a `route.ts` has none); the others in this list are planned for M2 and M3.
 
 Endpoints that change stock (`receive`, `adjust`, `transfers`, `imports/:id/commit`) accept an `Idempotency-Key` header (BL14). The history (`GET /api/stock/movements`) uses cursor pagination (BL16); other list endpoints use `page` and `pageSize` and return a total. Archiving and restoring a warehouse or product goes through `PATCH` (`archived: true` or `false`). Every write is also checked by BL23.
 
@@ -86,6 +88,104 @@ Any logged-in user, in every subscription state (BL23). Body: `{ "currentPasswor
 | 400    | `{ "code": "VALIDATION_ERROR", "message": <reason the new password is refused>, "details": { "field": "newPassword" } }`                                           |
 | 401    | `UNAUTHENTICATED`, as for `GET /api/me`                                                                                                                            |
 | 403    | `CSRF_REJECTED`                                                                                                                                                    |
+
+## Error codes
+
+Every error body is `{ code, message, details }` (BL29), with no stack trace. `message` is Indonesian. The codes below are the complete set the code can return (`src/lib/api-error.ts`, plus three set where the check happens).
+
+| Code                       | Status | Meaning                                                                                                                                                                       |
+| -------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `VALIDATION_ERROR`         | 400    | Header, query, path or body failed validation. `details` is `[{ "source": "header" \| "query" \| "params" \| "body", "path", "message" }]`, or `null` for a rule found later. |
+| `INVALID_CURRENT_PASSWORD` | 400    | `PATCH /api/me/password` only: the current password is wrong.                                                                                                                 |
+| `UNAUTHENTICATED`          | 401    | No valid session.                                                                                                                                                             |
+| `INVALID_CREDENTIALS`      | 401    | `POST /api/auth/login` only: wrong email or password.                                                                                                                         |
+| `FORBIDDEN`                | 403    | The role may not do this, the warehouse is outside the caller's reach, or the caller is a platform admin on a tenant endpoint.                                                |
+| `CSRF_REJECTED`            | 403    | A write request without a same-origin `Origin` header (set by the proxy, before any handler).                                                                                 |
+| `PLAN_LIMIT_REACHED`       | 403    | Defined for plan limits; no endpoint returns it yet (E8).                                                                                                                     |
+| `SUBSCRIPTION_READ_ONLY`   | 403    | Defined for a read-only subscription; no endpoint returns it yet (E8).                                                                                                        |
+| `NOT_FOUND`                | 404    | Missing, or belongs to another organization (one identical body, rule 2).                                                                                                     |
+| `CONFLICT`                 | 409    | The request is valid but the current state refuses it (duplicate code or SKU, archived target, stock still present, quantity limit).                                          |
+| `INSUFFICIENT_STOCK`       | 409    | A transfer needs more than the source holds; `details: { "productId" }`.                                                                                                      |
+| `INTERNAL_ERROR`           | 500    | Unexpected failure. No cause in the body.                                                                                                                                     |
+
+Every tenant endpoint below also answers `401 UNAUTHENTICATED`, `403 FORBIDDEN` for a platform admin (a platform admin has no organization), `400 VALIDATION_ERROR` for invalid input and `500 INTERNAL_ERROR`; these are not repeated in each table. A role without the right gets `403` before the query or body is validated.
+
+## Warehouses (S05, BL08)
+
+### `GET /api/warehouses`
+
+Every tenant role (`warehouse.read`). Owner: every active warehouse; Warehouse Admin and Viewer: only the assigned ones. Query: `page` (default 1), `pageSize` (default 20, at most 100), `includeArchived` (`true` or `false`, default `false`; honoured for the Owner only). Order: `code`, then `id`.
+
+| Status | Body                                                                                                                                        |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 200    | `{ "items": [{ "id", "organizationId", "code", "name", "address", "archivedAt", "createdAt", "updatedAt" }], "total", "page", "pageSize" }` |
+| 400    | `VALIDATION_ERROR`: `page` below 1, `pageSize` outside 1 to 100, or `includeArchived` not `true` or `false`                                 |
+
+### `POST /api/warehouses`
+
+Owner only (`warehouse.manage`). Body (unknown fields, including `organizationId`, are rejected): `code` (1 to 20 characters after trimming, stored uppercase, unique per organization), `name` (1 to 100), `address` (optional, at most 255; empty is stored null).
+
+| Status | Body                                                                            |
+| ------ | ------------------------------------------------------------------------------- |
+| 201    | The created warehouse, same shape as an item of the list above                  |
+| 400    | `VALIDATION_ERROR`: wrong shape, a field out of range, or an unknown field      |
+| 403    | `FORBIDDEN`: not the Owner                                                      |
+| 409    | `CONFLICT`: "Kode gudang sudah dipakai." (the code exists in this organization) |
+
+### `PATCH /api/warehouses/:id`
+
+Owner only (`warehouse.manage`). Body (strict, at least one field): `code`, `name`, `address` (same rules as `POST`) and `archived` (`true` archives, `false` restores). Archiving locks the warehouse row and refuses while any stock row is above 0 (ADR 0013).
+
+| Status | Body                                                                                                              |
+| ------ | ----------------------------------------------------------------------------------------------------------------- |
+| 200    | The updated warehouse                                                                                             |
+| 400    | `VALIDATION_ERROR`: no field given, wrong shape, or an unknown field                                              |
+| 403    | `FORBIDDEN`: not the Owner                                                                                        |
+| 404    | `NOT_FOUND`: missing or foreign. An archived warehouse is found only when restoring (`archived: false`).          |
+| 409    | `CONFLICT`: the code exists, or "Gudang masih memiliki stok. Kosongkan stok sebelum mengarsipkan." when archiving |
+
+## Products (S07, BL09)
+
+### `GET /api/products`
+
+Every tenant role (`product.read`). Query: `page` (default 1), `pageSize` (default 20, at most 100), `includeArchived` (default `false`; honoured for the Owner only). Order: `sku`, then `id`.
+
+| Status | Body                                                                                                                                                |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 200    | `{ "items": [{ "id", "organizationId", "sku", "name", "unit", "minStock", "archivedAt", "createdAt", "updatedAt" }], "total", "page", "pageSize" }` |
+| 400    | `VALIDATION_ERROR`: as for `GET /api/warehouses`                                                                                                    |
+
+### `POST /api/products`
+
+Owner only (`product.manage`). Body (strict): `sku` (whitespace removed, stored uppercase, 1 to 50 characters, unique per organization), `name` (1 to 100), `unit` (`bks`, `ktk`, `pcs`, `btl`, `jrg` or `pak`), `minStock` (optional whole number 0 to 1,000,000,000, default 0).
+
+| Status | Body                                                         |
+| ------ | ------------------------------------------------------------ |
+| 201    | The created product, same shape as an item of the list above |
+| 400    | `VALIDATION_ERROR`                                           |
+| 403    | `FORBIDDEN`: not the Owner                                   |
+| 409    | `CONFLICT`: "SKU sudah dipakai."                             |
+
+### `GET /api/products/:id`
+
+Every tenant role (`product.read`). An archived product is visible to the Owner only.
+
+| Status | Body                                                                                     |
+| ------ | ---------------------------------------------------------------------------------------- |
+| 200    | The product                                                                              |
+| 404    | `NOT_FOUND`: missing, malformed id, foreign, or archived and the caller is not the Owner |
+
+### `PATCH /api/products/:id`
+
+Owner only (`product.manage`). Body (strict, at least one field): `sku`, `name`, `unit`, `minStock` (same rules as `POST`) and `archived` (`true` archives, `false` restores). Archiving a product that still has stock is allowed (BL09).
+
+| Status | Body                                                                  |
+| ------ | --------------------------------------------------------------------- |
+| 200    | The updated product                                                   |
+| 400    | `VALIDATION_ERROR`: no field given, wrong shape, or an unknown field  |
+| 403    | `FORBIDDEN`: not the Owner                                            |
+| 404    | `NOT_FOUND`: missing or foreign (an archived one only when restoring) |
+| 409    | `CONFLICT`: "SKU sudah dipakai."                                      |
 
 ## Warehouse detail (S06)
 
@@ -160,6 +260,60 @@ One transaction locks the warehouse row, rejects an archived warehouse or produc
 | 404    | `NOT_FOUND`: a product that belongs to another organization or does not exist (the same body for both)                                                                                                   |
 | 409    | `CONFLICT` (Indonesian message): the product is archived; the warehouse was archived while the request was running; or the new quantity would pass the largest value the column can hold (2,147,483,647) |
 
+## Stock adjustment (BL12)
+
+### `POST /api/stock/adjust`
+
+Owner and Warehouse Admin (`stock.adjust`; a Warehouse Admin only for an assigned warehouse). Header `Idempotency-Key` (UUID) is required, see "Idempotency (BL14)". Body (strict):
+
+| Field         | Rule                                                                                                                         |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `warehouseId` | UUID                                                                                                                         |
+| `productId`   | UUID                                                                                                                         |
+| `mode`        | `SET` (`value` is the new quantity, 0 to 1,000,000) or `DELTA` (`value` is a non-zero whole number, -1,000,000 to 1,000,000) |
+| `value`       | whole number, see `mode`                                                                                                     |
+| `reason`      | `STOCK_OPNAME`, `DAMAGED`, `LOST` or `CORRECTION`                                                                            |
+| `note`        | optional, at most 255 characters after trimming; empty is stored null                                                        |
+
+One transaction locks the warehouse row, reads the current quantity, writes the new one with a conditional update and writes an `ADJUST` movement (ADR 0013). An archived product may be adjusted (so leftover stock can be zeroed); an archived warehouse may not.
+
+| Status | Body                                                                                                                                                                                                 |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 201    | `{ "id", "warehouseId", "productId", "quantity", "createdAt", "reason" }` where `quantity` is the signed change; a replay gives the same body plus `Idempotency-Replayed: true`                      |
+| 400    | `VALIDATION_ERROR`: missing or malformed `Idempotency-Key`, wrong shape, unknown field, `value` out of range, or the new quantity equals the current one ("Stok baru sama dengan stok saat ini ...") |
+| 403    | `FORBIDDEN`: a Viewer, or a warehouse that is not assigned to a Warehouse Admin, is archived, belongs to another organization or does not exist (the same body for all of these)                     |
+| 404    | `NOT_FOUND`: a product that belongs to another organization or does not exist                                                                                                                        |
+| 409    | `CONFLICT`: the new quantity would be below 0; the warehouse was archived while the request ran; or the stock changed during the request ("Stok berubah saat disesuaikan. Coba lagi.")               |
+
+## Stock history (S10, BL16)
+
+### `GET /api/stock/movements`
+
+Every tenant role (`history.read`, warehouse-level). Only movements of the caller's warehouses are returned (Owner: all active warehouses). Newest first, cursor pagination, 50 rows per page. Query, all optional:
+
+| Query         | Rule                                                                       |
+| ------------- | -------------------------------------------------------------------------- |
+| `productId`   | UUID                                                                       |
+| `warehouseId` | UUID; a warehouse outside the caller's reach gives an empty list, not 403  |
+| `type`        | `RECEIVE`, `ADJUST`, `TRANSFER_OUT`, `TRANSFER_IN` or `IMPORT`             |
+| `createdById` | UUID                                                                       |
+| `from`, `to`  | ISO 8601 instants with an offset; `from` is inclusive, `to` is exclusive   |
+| `cursor`      | the `nextCursor` of the previous page, opaque; any other value gives `400` |
+
+| Status | Body                                                                                                                                                                     |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 200    | `{ "items": [{ "id", "warehouseId", "productId", "type", "quantityDelta", "reason", "note", "transferId", "createdById", "createdAt" }], "nextCursor": string \| null }` |
+| 400    | `VALIDATION_ERROR`: a malformed ID, an unknown `type`, a bad instant or a bad `cursor`                                                                                   |
+
+### `GET /api/stock/movements/:id`
+
+Every tenant role (`history.read`). A malformed ID, a missing one, another organization's and one outside the caller's warehouses all give the same `404 NOT_FOUND`.
+
+| Status | Body                                                                                                                                                                                                                                                                                   |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 200    | An item of the list above plus `"warehouse": { "id", "code", "name" }`, `"product": { "id", "sku", "name", "unit" }`, `"createdBy": { "id", "name", "role" } \| null` and `"transfer": { "id", "code", "fromWarehouse": { "id", "name" }, "toWarehouse": { ... } } \| null`. No email. |
+| 404    | `NOT_FOUND`: see above                                                                                                                                                                                                                                                                 |
+
 ## Stock transfer (BL13, BL14)
 
 ### `POST /api/stock/transfers`
@@ -203,3 +357,24 @@ Owner and Warehouse Admin (`transfer.destinations`, organization-level); a Viewe
 | ------ | ---------------------------------------------------------------------------------------------- |
 | 200    | `{ "items": [{ "id", "code", "name" }] }`, ordered by `code`; archived warehouses are left out |
 | 403    | `FORBIDDEN`: a Viewer                                                                          |
+
+## Dashboard (S04, BL16)
+
+### `GET /api/dashboard`
+
+Every tenant role. No query, no cache: each call reads the database. `totalProducts` counts the active products of the whole organization; every other figure covers only the caller's warehouses (an Owner has all active ones). `totalUnits` includes the units of archived products; `lowCount` and `outCount` leave archived products out. "Today" is the WIB calendar day (00:00 to 24:00 WIB). A transfer writes two movements, so it counts twice in `movementsToday` and can show twice in `recentActivity`.
+
+| Status | Body                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 200    | `{ "summary": { "totalProducts", "totalUnits", "lowCount", "outCount", "movementsToday" }, "restock": { "items": [{ "warehouse": { "id", "code", "name" }, "product": { "id", "sku", "name", "unit", "minStock" }, "quantity", "status": "OUT" \| "LOW" }], "total" }, "recentActivity": [{ "id", "type", "quantityDelta", "reason", "createdAt", "warehouse": { "id", "code", "name" }, "product": { "id", "sku", "name", "unit" }, "createdBy": { "id", "name" } \| null, "transfer": { "id", "code" } \| null }] }`. `restock.items` holds at most 5 pairs, the furthest below `minStock` first; `recentActivity` holds the 5 newest movements. |
+
+## System
+
+### `GET /api/health`
+
+Public, no session. Never cached (`Cache-Control: no-store`). The database check is cached inside the server for 60 seconds when up and 15 seconds when down. The body has no error text, host or database version.
+
+| Status | Body                                                                                                   |
+| ------ | ------------------------------------------------------------------------------------------------------ |
+| 200    | `{ "status": "ok", "app": { "commit": string \| null }, "database": { "status": "up", "latencyMs" } }` |
+| 503    | `{ "status": "error", "app": { "commit": string \| null }, "database": { "status": "down" } }`         |

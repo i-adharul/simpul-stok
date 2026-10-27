@@ -10,6 +10,8 @@ run if the two ever name a different host, port or database.
 | `test-database.ts`  | `createTestPrisma`, `assertTestDatabaseUrl`, `assertSameTestDatabase` |
 | `tenant-isolation/` | The cross-tenant harness (below)                                      |
 
+`api-docs.test.ts` fails when a `route.ts` under `src/app/api` has no `### \`METHOD /path\``section in`docs/04_API_Spec.md`; document the endpoint in the same story.
+
 ## Cross-tenant harness (BL03)
 
 Proves that organization A cannot read, change or delete organization B's data. No HTTP server: the exported
