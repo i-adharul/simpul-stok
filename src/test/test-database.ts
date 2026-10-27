@@ -1,22 +1,8 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/prisma/client";
+import { assertTestDatabaseUrl } from "./test-database-url";
 
-// Tests truncate tables. This guard is the only thing standing between a typo in
-// TEST_DATABASE_URL and an empty development database, so it checks the name itself.
-// (It must not compare with DATABASE_URL: in CI both point to the same test database.)
-export function assertTestDatabaseUrl(url: string | undefined): string {
-  if (!url) {
-    throw new Error("TEST_DATABASE_URL is not set. Add it to .env (see .env.example).");
-  }
-  const databaseName = new URL(url).pathname.replace(/^\//, "");
-  if (!databaseName.endsWith("_test")) {
-    throw new Error(
-      `Refusing to run tests: TEST_DATABASE_URL points to "${databaseName}", ` +
-        `but the database name must end with "_test".`,
-    );
-  }
-  return url;
-}
+export { assertTestDatabaseUrl };
 
 // Route modules open their own connection from DATABASE_URL, while fixtures use TEST_DATABASE_URL.
 // If they differed, a harness would read one database and write another and pass for the wrong
