@@ -1,0 +1,8 @@
+# Log in first with http/auth.http, then run this in the same VS Code session.
+
+### Dashboard (S04)
+# Expect 200 { summary: { totalProducts, totalUnits, lowCount, outCount, movementsToday },
+#   restock: { items: up to 5, total }, recentActivity: up to 5 }.
+# totalProducts is organization-wide (active products). The other figures cover only the caller's
+#   warehouses (totalUnits includes archived products' units); "today" is the WIB calendar day.
+GET http://localhost:3000/api/dashboard

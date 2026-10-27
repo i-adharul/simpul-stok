@@ -68,7 +68,7 @@ src/
     stock/             Warehouses, products, stock levels, movements, transfers
                        (warehouse-service/-schema, product-service/-schema, warehouse-members-service,
                        stock-service: receive, stock-adjust-service, stock-level-service, stock-status,
-                       stock-transfer-service: transfers, ADR 0014,
+                       stock-transfer-service: transfers, ADR 0014, dashboard-service: S04 figures,
                        warehouse-lock: ADR 0013, lock-exemptions)
   test/                Test helpers and the tenant-isolation harness
   proxy.ts             Assigns the request ID and rejects cross-origin writes (CSRF) before routes run
