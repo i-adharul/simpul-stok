@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isNavItemActive, navSections } from "./nav-items";
+import { isNavItemActive, navSections, navSectionsFor } from "./nav-items";
 
 describe("isNavItemActive", () => {
   it("matches the exact path", () => {
@@ -23,5 +23,19 @@ describe("navSections", () => {
   it("has unique hrefs", () => {
     const hrefs = navSections.flatMap((section) => section.items.map((item) => item.href));
     expect(new Set(hrefs).size).toBe(hrefs.length);
+  });
+});
+
+describe("navSectionsFor", () => {
+  const hrefs = (role?: string) =>
+    navSectionsFor(role).flatMap((section) => section.items.map((item) => item.href));
+
+  it("hides the transfer menu from a Viewer", () => {
+    expect(hrefs("VIEWER")).not.toContain("/transfers/new");
+  });
+
+  it("shows the transfer menu to Owner and Warehouse Admin", () => {
+    expect(hrefs("OWNER")).toContain("/transfers/new");
+    expect(hrefs("WAREHOUSE_ADMIN")).toContain("/transfers/new");
   });
 });

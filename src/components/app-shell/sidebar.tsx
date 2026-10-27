@@ -28,7 +28,7 @@ export function Sidebar({ me, onNavigate }: SidebarProps) {
           <Skeleton className="h-5 w-32" />
         )}
       </div>
-      <SidebarNav onNavigate={onNavigate} />
+      <SidebarNav onNavigate={onNavigate} role={me?.user.role} />
       <UserCard me={me} />
     </div>
   );

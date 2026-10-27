@@ -29,7 +29,7 @@ export function receiveStock(idempotencyKey: string, values: StockReceiveValues)
 
 type Page<T> = { items: T[]; total: number };
 
-async function fetchAll<T>(path: string): Promise<T[]> {
+export async function fetchAll<T>(path: string): Promise<T[]> {
   const pageSize = 100;
   const items: T[] = [];
   for (let page = 1; ; page++) {
