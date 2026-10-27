@@ -28,13 +28,13 @@ This is a product hypothesis for a portfolio, not yet validated with real users.
 
 ## What this project demonstrates
 
-| Capability                                | How it is proven                                                   | Status       |
-| ----------------------------------------- | ------------------------------------------------------------------ | ------------ |
-| No negative stock under concurrent access | Concurrency test: 20 simultaneous requests against a stock of 10   | Planned (M1) |
-| Atomic transfers between warehouses       | Test that forces a failure mid-transfer and checks nothing changed | Planned (M1) |
-| Idempotent requests                       | Unique idempotency key enforced in the database                    | Planned (M1) |
-| Tenant isolation                          | Automated tests across every endpoint (404 for other tenants' IDs) | Planned (M1) |
-| Subscription and payment flow             | Webhook verification, duplicate-event handling, access freeze      | Planned (M2) |
+| Capability                                | How it is proven                                                   | Status                                             |
+| ----------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------- |
+| No negative stock under concurrent access | Concurrency test: 20 simultaneous requests against a stock of 10   | Tested (see [Measured results](#measured-results)) |
+| Atomic transfers between warehouses       | Test that forces a failure mid-transfer and checks nothing changed | Tested (see [Measured results](#measured-results)) |
+| Idempotent requests                       | Unique idempotency key enforced in the database                    | Planned (M1)                                       |
+| Tenant isolation                          | Automated tests across every endpoint (404 for other tenants' IDs) | Planned (M1)                                       |
+| Subscription and payment flow             | Webhook verification, duplicate-event handling, access freeze      | Planned (M2)                                       |
 
 ## Tech stack
 
@@ -95,6 +95,21 @@ In bash, the first line is `read -s -p "Neon direct URL: " NEON_DIRECT; echo`.
 - Never run the seed against Neon. `pnpm prisma db seed` refuses a non-local database on purpose.
 - Check the result with `pnpm prisma migrate status` (same prompt and `DATABASE_URL="$NEON_DIRECT"` prefix): it must say
   "Database schema is up to date".
+
+## Measured results
+
+Produced by `pnpm vitest run` against the real local Postgres (`simpul_test`); the assertions below are in the
+tests, so a regression fails CI. Three concurrency and atomicity files (31 tests) were run 5 times in a row: all
+5 runs passed. Transfer cross-tenant and role checks: 12 of 12 harness tests passed.
+
+| Scenario                                                     | Result                                                                                                                            | Test                                                     |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| 20 parallel transfers of 1 unit, source stock 10             | 10 succeeded, 10 failed (409 `INSUFFICIENT_STOCK`); source 0, destination 10; 20 movement rows (10 out, 10 in); no negative level | `stock-transfer-concurrency.test.ts`                     |
+| 40 opposite transfers (20 A to B, 20 B to A), 100 units each | 0 failures (no deadlock); 100 and 100 again (total 200); 40 transfers, 80 movement rows                                           | `stock-transfer-concurrency.test.ts`                     |
+| Failure after the source was decremented                     | Source unchanged, no transfer and no movement written; retry works after the fix                                                  | `stock-transfer-atomicity.test.ts`                       |
+| Last item of a transfer lacks stock                          | Earlier items unchanged                                                                                                           | `stock-transfer-atomicity.test.ts`                       |
+| 10 parallel adjustments of -1 on stock 6                     | 6 succeeded, rest 409, never negative                                                                                             | `stock-adjust.test.ts`                                   |
+| Transfer endpoints, other tenant or wrong role               | 404 for another organization's warehouse or product, 403 for a role without the right                                             | `tenant-isolation.test.ts`, `stock-transfer-api.test.ts` |
 
 ## Roadmap
 
