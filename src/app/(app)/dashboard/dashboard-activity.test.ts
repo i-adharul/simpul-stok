@@ -41,4 +41,17 @@ describe("dashboard activity", () => {
       "-2 bks Biji Kopi di Gudang Pusat (Rusak)",
     );
   });
+
+  it("signs transfer-in and import quantities", () => {
+    expect(activityText({ ...base, type: "TRANSFER_IN", quantityDelta: 5 })).toBe(
+      "+5 bks Biji Kopi di Gudang Pusat",
+    );
+    expect(activityText({ ...base, type: "IMPORT", quantityDelta: 20 })).toBe(
+      "+20 bks Biji Kopi di Gudang Pusat",
+    );
+  });
+
+  it("works when the creator is unknown", () => {
+    expect(activityText({ ...base, createdBy: null })).toBe("+100 bks Biji Kopi di Gudang Pusat");
+  });
 });

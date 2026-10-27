@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeftRight, ArrowRight, Boxes, Package, TriangleAlert } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, Boxes, Package, TriangleAlert, Warehouse } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/states/empty-state";
 import { ErrorBanner } from "@/components/states/error-banner";
 import { LoadingSkeleton } from "@/components/states/loading-skeleton";
 import { fetchMe, ME_QUERY_KEY } from "@/components/app-shell/shell-user";
 import { formatDateTimeWib, formatNumber } from "@/lib/format";
+import { canReceiveStock } from "../stock/stock-api";
 import { AdjustStockButton } from "../stock/stock-adjust-dialog";
 import { ReceiveStockButton } from "../stock/stock-receive-dialog";
 import { activityText, activityTitle } from "./dashboard-activity";
@@ -197,6 +198,16 @@ export function DashboardView() {
           {name ? `Selamat datang, ${name}` : "Dashboard"}
         </h1>
         <div className="flex flex-wrap gap-2">
+          <Link href="/warehouses" className={buttonVariants({ variant: "outline" })}>
+            <Warehouse aria-hidden />
+            Lihat gudang
+          </Link>
+          {canReceiveStock(me.data?.user.role) && (
+            <Link href="/transfers/new" className={buttonVariants({ variant: "outline" })}>
+              <ArrowLeftRight aria-hidden />
+              Buat mutasi
+            </Link>
+          )}
           <AdjustStockButton />
           <ReceiveStockButton />
         </div>
