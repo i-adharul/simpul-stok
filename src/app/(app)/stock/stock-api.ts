@@ -71,3 +71,41 @@ export function adjustStock(idempotencyKey: string, values: StockAdjustValues) {
 
 // BL12: same roles as a receipt (the Viewer only reads).
 export const canAdjustStock = canReceiveStock;
+
+export type StockStatus = "OUT" | "LOW" | "OK";
+
+// Shape of GET /api/stock (E4-06). Declared here because the server type pulls in Prisma.
+export type StockRow = {
+  warehouse: { id: string; code: string; name: string };
+  product: {
+    id: string;
+    sku: string;
+    name: string;
+    unit: string;
+    minStock: number;
+    archived: boolean;
+  };
+  quantity: number;
+  status: StockStatus;
+  updatedAt: string;
+};
+export type StockPage = {
+  items: StockRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  summary: { out: number; low: number; ok: number };
+};
+export type StockFilters = { warehouseId: string; q: string; status: StockStatus | "" };
+export const STOCK_PAGE_SIZE = 20;
+
+export function fetchStockPage(filters: StockFilters, page: number) {
+  const query = new URLSearchParams({ page: String(page), pageSize: String(STOCK_PAGE_SIZE) });
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) query.set(key, value);
+  }
+  return apiFetch<StockPage>(`/api/stock?${query.toString()}`);
+}
+
+export const STOCK_WAREHOUSES_KEY = [...STOCK_QUERY_KEY, "warehouse-options"] as const;
+export const fetchWarehouseOptions = () => fetchAll<Warehouse>("/api/warehouses");
