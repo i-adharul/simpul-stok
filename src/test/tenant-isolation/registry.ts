@@ -300,6 +300,26 @@ const readMovementRow = async (prisma: PrismaClient, id: string): Promise<RowSna
   return row && { ...row };
 };
 
+// A transfer between the organization's two warehouses (W1 is assigned to every role). Immutable data,
+// so the snapshot is every column.
+const createTransferRow = async (t: TwoTenants, owner: TenantKey) =>
+  (
+    await t.prisma.stockTransfer.create({
+      data: {
+        organizationId: t[owner].organizationId,
+        code: t.unique("MT"),
+        fromWarehouseId: t[owner].warehouseId,
+        toWarehouseId: t[owner].secondWarehouseId,
+        createdById: t[owner].users.OWNER,
+      },
+    })
+  ).id;
+
+const readTransferRow = async (prisma: PrismaClient, id: string): Promise<RowSnapshot | null> => {
+  const row = await prisma.stockTransfer.findUnique({ where: { id } });
+  return row && { ...row };
+};
+
 // A stock row in the organization's own warehouse (assigned to every role) for a fresh product. The id
 // has the form warehouseId:productId, as the response holds no single row id.
 const createStockLevelRow = async (t: TwoTenants, owner: TenantKey) => {
@@ -355,6 +375,19 @@ export const TENANT_ENDPOINTS: TenantEndpoint[] = [
     idsOf: (json) => (json as { items: { id: string }[] }).items.map((row) => row.id),
     supportsCursor: true,
     encodeCursor: (id) => encodeMovementCursor({ createdAt: new Date(), id }),
+  },
+  {
+    kind: "item",
+    name: "GET /api/stock/transfers/[id]",
+    route: "stock/transfers/[id]",
+    method: "GET",
+    module: () => import("@/app/api/stock/transfers/[id]/route"),
+    action: "history.read",
+    allowedRoles: rolesFor("history.read"),
+    idParam: "id",
+    path: (id: string) => `/api/stock/transfers/${id}`,
+    createRow: createTransferRow,
+    readRow: readTransferRow,
   },
   {
     kind: "list",

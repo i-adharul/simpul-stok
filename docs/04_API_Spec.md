@@ -186,6 +186,15 @@ One transaction locks both warehouses in ascending id order, rejects an archived
 | 409    | `CONFLICT`: the source, destination or a product is archived; the quantity at the destination would pass 2,147,483,647; or too many concurrent transfers collided ("Terlalu banyak mutasi bersamaan, coba lagi.")            |
 | 409    | `INSUFFICIENT_STOCK` with `details: { "productId" }` of the first item (ordered by product id) that the source cannot cover; nothing is written                                                                              |
 
+### `GET /api/stock/transfers/:id`
+
+Any tenant role (`history.read`, warehouse-level). Visible when the caller may see the source OR the destination warehouse (an Owner sees all). A malformed ID, a missing one, another organization's and one outside the caller's warehouses all give the same `404 NOT_FOUND`. Used by S12 and by the link in P13.
+
+| Status | Body                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 200    | `{ "id", "code", "note", "createdAt", "createdBy": { "id", "name", "role" } \| null, "fromWarehouse": { "id", "code", "name", "address" }, "toWarehouse": { ... }, "items": [{ "productId", "sku", "name", "unit", "quantity", "outMovementId", "inMovementId" }] }`; items ordered by product ID; a movement ID is `null` when its warehouse is not one the caller may see (P13 would answer 404). No stock balances, no email |
+| 404    | `NOT_FOUND`: see above                                                                                                                                                                                                                                                                                                                                                                                                          |
+
 ### `GET /api/stock/transfers/destinations`
 
 Owner and Warehouse Admin (`transfer.destinations`, organization-level); a Viewer gets 403. Returns every active warehouse of the organization, because `GET /api/warehouses` lists only the assigned ones for a Warehouse Admin and the destination of a transfer may be any warehouse (BL13). No query parameters.

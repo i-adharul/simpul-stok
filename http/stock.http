@@ -162,3 +162,10 @@ Idempotency-Key: 7a2e3d2f-4c1b-4d66-8d2b-1a8e4c0b2f03
 ### Destinations for the transfer form
 # Expect 200 { items: [{ id, code, name }] } with every active warehouse (Owner and Warehouse Admin; a Viewer gets 403)
 GET http://localhost:3000/api/stock/transfers/destinations
+
+### Transfer detail (S12)
+# Expect 200 { id, code, note, createdAt, createdBy: { id, name, role }, fromWarehouse: { id, code, name, address },
+# toWarehouse, items: [{ productId, sku, name, unit, quantity, outMovementId, inMovementId }] }.
+# A movement id is null for a warehouse you are not assigned to. 404 for a missing id, another organization's id,
+# or a transfer whose source and destination are both outside your warehouses.
+GET http://localhost:3000/api/stock/transfers/{{transferId}}

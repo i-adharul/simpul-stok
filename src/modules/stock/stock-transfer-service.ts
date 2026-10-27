@@ -5,7 +5,7 @@ import { assertOwnedIds, findOwnedOrThrow } from "../platform/ownership";
 import type { RequestContext } from "../platform/request-context";
 import type { TenantClient } from "../platform/tenant-client";
 import type { TransferBody } from "./stock-schema";
-import { addToLevel } from "./stock-service";
+import { addToLevel, UUID } from "./stock-service";
 import { lockWarehouse } from "./warehouse-lock";
 
 const TRANSFER_ENDPOINT = "POST /api/stock/transfers";
@@ -42,6 +42,64 @@ export async function loadTransfer(db: TenantClient, id: string) {
   };
 }
 export type TransferResponse = Awaited<ReturnType<typeof loadTransfer>>;
+
+// S12 (BL16). Visible when the caller may see the source OR the destination warehouse; any other case is
+// the same 404 as a missing id or another organization's id (rule 2). The tenant client does not follow
+// relations, so names come from separate reads. A movement id is given only for a warehouse the caller
+// may see, because P13 (GET /api/stock/movements/:id) refuses the others with 404.
+export async function getTransfer(db: TenantClient, ctx: RequestContext, id: string) {
+  if (!UUID.test(id)) throw notFoundError();
+  const transfer = await db.stockTransfer.findFirst({ where: { id } });
+  const visible = (warehouseId: string) => ctx.warehouseIds.includes(warehouseId);
+  if (!transfer || !(visible(transfer.fromWarehouseId) || visible(transfer.toWarehouseId))) {
+    throw notFoundError();
+  }
+  const movements = await db.stockMovement.findMany({
+    where: { transferId: id },
+    orderBy: [{ productId: "asc" }, { id: "asc" }],
+  });
+  const [warehouses, products, creator] = await Promise.all([
+    db.warehouse.findMany({
+      where: { id: { in: [transfer.fromWarehouseId, transfer.toWarehouseId] } },
+    }),
+    db.product.findMany({ where: { id: { in: movements.map((m) => m.productId) } } }),
+    db.user.findFirst({ where: { id: transfer.createdById } }),
+  ]);
+  const side = (warehouseId: string) => {
+    const row = warehouses.find((w) => w.id === warehouseId);
+    if (!row) throw notFoundError();
+    return { id: row.id, code: row.code, name: row.name, address: row.address };
+  };
+  const movementIdOf = (productId: string, type: string, warehouseId: string) => {
+    const row = movements.find((m) => m.productId === productId && m.type === type);
+    return row && visible(warehouseId) ? row.id : null;
+  };
+  const items = movements
+    .filter((m) => m.type === "TRANSFER_OUT")
+    .map((out) => {
+      const product = products.find((p) => p.id === out.productId);
+      return {
+        productId: out.productId,
+        sku: product?.sku ?? "",
+        name: product?.name ?? "",
+        unit: product?.unit ?? "",
+        quantity: -out.quantityDelta,
+        outMovementId: movementIdOf(out.productId, "TRANSFER_OUT", transfer.fromWarehouseId),
+        inMovementId: movementIdOf(out.productId, "TRANSFER_IN", transfer.toWarehouseId),
+      };
+    });
+  return {
+    id: transfer.id,
+    code: transfer.code,
+    note: transfer.note,
+    createdAt: transfer.createdAt.toISOString(),
+    // id, name and role only, never the email (as P13).
+    createdBy: creator ? { id: creator.id, name: creator.name, role: creator.role } : null,
+    fromWarehouse: side(transfer.fromWarehouseId),
+    toWarehouse: side(transfer.toWarehouseId),
+    items,
+  };
+}
 
 // BL13: the destination may be ANY active warehouse of the organization, not only the assigned ones, so
 // this is not GET /api/warehouses. Only what the picker shows; the tenant client scopes the organization.
