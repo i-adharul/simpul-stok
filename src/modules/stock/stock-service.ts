@@ -197,7 +197,7 @@ export async function getMovement(db: TenantClient, ctx: RequestContext, id: str
   };
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const movementListItem = (row: Movement) => ({
   id: row.id,
