@@ -8,6 +8,7 @@ import { Dialog } from "radix-ui";
 import { Loader2, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { nextIdempotencyKey, type Attempt } from "./idempotency-key";
 import { ErrorBanner } from "@/components/states/error-banner";
 import { fetchMe, ME_QUERY_KEY } from "@/components/app-shell/shell-user";
 import {
@@ -48,8 +49,8 @@ const emptyValues = (warehouseId: string, productId: string): StockAdjustInput =
 // P05. Opened from S04, S06 and S09 (S09 does not exist yet).
 export function StockAdjustDialog({ open, onOpenChange, warehouseId, productId }: Props) {
   const queryClient = useQueryClient();
-  // A new key every time the form opens, kept until the adjustment succeeds (BL14), as in P04.
-  const idempotencyKey = useRef("");
+  // The key follows the payload (BL14): reset when the dialog opens, reused only for an identical retry.
+  const lastAttempt = useRef<Attempt | null>(null);
   // The same warehouse and product lists as P04 (one cache entry).
   const options = useQuery({
     queryKey: RECEIVE_OPTIONS_KEY,
@@ -68,7 +69,7 @@ export function StockAdjustDialog({ open, onOpenChange, warehouseId, productId }
 
   useEffect(() => {
     if (!open) return;
-    idempotencyKey.current = crypto.randomUUID();
+    lastAttempt.current = null;
   }, [open]);
 
   // Start fresh every time the dialog opens; the select is set again once the options are loaded.
@@ -78,7 +79,10 @@ export function StockAdjustDialog({ open, onOpenChange, warehouseId, productId }
   }, [open, options.data, warehouseId, productId, onlyWarehouse, form]);
 
   const adjust = useMutation({
-    mutationFn: (values: StockAdjustValues) => adjustStock(idempotencyKey.current, values),
+    mutationFn: (values: StockAdjustValues) => {
+      lastAttempt.current = nextIdempotencyKey(lastAttempt.current, values);
+      return adjustStock(lastAttempt.current.key, values);
+    },
     onSuccess: async () => {
       onOpenChange(false);
       await queryClient.invalidateQueries({ queryKey: STOCK_QUERY_KEY });
