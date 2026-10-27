@@ -15,13 +15,7 @@ import { ErrorBanner } from "@/components/states/error-banner";
 import { ApiError } from "@/lib/api-client";
 import { formatDateTimeWib } from "@/lib/format";
 import { fetchMovement, MOVEMENTS_QUERY_KEY, type MovementDetail } from "./movement-api";
-import { formatDelta, REASON_LABEL, TYPE_LABEL } from "./movement-labels";
-
-const ROLE_LABEL: Record<string, string> = {
-  OWNER: "Pemilik",
-  WAREHOUSE_ADMIN: "Admin Gudang",
-  VIEWER: "Viewer",
-};
+import { formatDelta, movementRoleLabel, REASON_LABEL, TYPE_LABEL } from "./movement-labels";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -104,7 +98,7 @@ function DetailBody({ row }: { row: MovementDetail }) {
             <>
               <span className="font-medium">{row.createdBy.name}</span>{" "}
               <span className="rounded border px-1.5 text-xs text-muted-foreground">
-                {ROLE_LABEL[row.createdBy.role] ?? row.createdBy.role}
+                {movementRoleLabel(row.createdBy.role)}
               </span>
             </>
           ) : (

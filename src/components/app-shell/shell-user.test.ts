@@ -15,6 +15,13 @@ describe("roleLabel", () => {
   ])("maps %s to %s", (role, label) => {
     expect(roleLabel(role)).toBe(label);
   });
+
+  it.each(["constructor", "__proto__", "toString", "hasOwnProperty"])(
+    "returns an unknown role %s as text, not an inherited property",
+    (role) => {
+      expect(roleLabel(role)).toBe(role);
+    },
+  );
 });
 
 describe("organizationLabel", () => {

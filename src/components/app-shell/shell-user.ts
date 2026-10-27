@@ -17,7 +17,8 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 export function roleLabel(role: string): string {
-  return ROLE_LABELS[role] ?? role;
+  // hasOwn, not `??`: "constructor" would otherwise resolve to Object.prototype.constructor.
+  return Object.hasOwn(ROLE_LABELS, role) ? ROLE_LABELS[role] : role;
 }
 
 // A platform admin has no organization (docs/04_API_Spec.md).

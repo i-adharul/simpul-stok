@@ -18,6 +18,17 @@ export const REASON_LABEL: Record<MovementReason, string> = {
   CORRECTION: "Koreksi",
 };
 
+const ROLE_LABEL: Record<string, string> = {
+  OWNER: "Pemilik",
+  WAREHOUSE_ADMIN: "Admin Gudang",
+  VIEWER: "Viewer",
+};
+
+/** Role as shown on a movement; an unknown role stays as text. hasOwn keeps "constructor" from matching. */
+export function movementRoleLabel(role: string): string {
+  return Object.hasOwn(ROLE_LABEL, role) ? ROLE_LABEL[role] : role;
+}
+
 /** 40 -> "+40", -2 -> "-2", 1100 -> "+1.100" (Indonesian grouping, an explicit sign). */
 export function formatDelta(delta: number): string {
   return `${delta > 0 ? "+" : delta < 0 ? "-" : ""}${formatNumber(Math.abs(delta))}`;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dayBoundsWib, formatDelta } from "./movement-labels";
+import { dayBoundsWib, formatDelta, movementRoleLabel } from "./movement-labels";
 
 describe("formatDelta", () => {
   it("shows an explicit sign and Indonesian grouping", () => {
@@ -20,4 +20,17 @@ describe("dayBoundsWib", () => {
     expect(dayBoundsWib("", "")).toEqual({});
     expect(dayBoundsWib("bad", "")).toEqual({});
   });
+});
+
+describe("movementRoleLabel", () => {
+  it("maps a known role and keeps an unknown one as text", () => {
+    expect(movementRoleLabel("OWNER")).toBe("Pemilik");
+    expect(movementRoleLabel("SOMETHING_NEW")).toBe("SOMETHING_NEW");
+  });
+  it.each(["constructor", "__proto__", "toString", "hasOwnProperty"])(
+    "returns %s as text, not an inherited property",
+    (role) => {
+      expect(movementRoleLabel(role)).toBe(role);
+    },
+  );
 });

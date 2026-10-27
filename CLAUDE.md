@@ -62,9 +62,12 @@ src/
                        (tenant-client.ts: tenant-scoped Prisma client; tenant-route.ts: withTenantRoute;
                        request-context.ts: context from the session; can.ts: role matrix;
                        ownership.ts: foreign IDs of other organizations return 404;
-                       subscription-access.ts: temporary write hook, always ACTIVE)
+                       subscription-access.ts: temporary write hook, always ACTIVE;
+                       idempotency.ts: runIdempotent, ADR 0012)
     stock/             Warehouses, products, stock levels, movements, transfers
-                       (warehouse-service/-schema, product-service/-schema, warehouse-members-service)
+                       (warehouse-service/-schema, product-service/-schema, warehouse-members-service,
+                       stock-service: receive, stock-adjust-service, stock-level-service, stock-status,
+                       warehouse-lock: ADR 0013, lock-exemptions)
   test/                Test helpers and the tenant-isolation harness
   proxy.ts             Assigns the request ID and rejects cross-origin writes (CSRF) before routes run
   instrumentation.ts   Imports lib/env at server start so bad config stops the app

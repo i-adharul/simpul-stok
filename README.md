@@ -100,7 +100,7 @@ In bash, the first line is `read -s -p "Neon direct URL: " NEON_DIRECT; echo`.
 
 | Milestone | Scope                                                                          | Status                |
 | --------- | ------------------------------------------------------------------------------ | --------------------- |
-| M1        | Core inventory online: auth, warehouses, products, stock, transfers, dashboard | In progress (E4 next) |
+| M1        | Core inventory online: auth, warehouses, products, stock, transfers, dashboard | In progress (E5 next) |
 | M2        | SaaS: organizations, plans, Xendit sandbox billing, platform admin             | Planned               |
 | M3        | Extras: import/export, notifications, audit log, Row-Level Security            | Planned               |
 | M4        | Portfolio polish: demo data, docs, security review                             | Planned               |
