@@ -5,6 +5,8 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    // The `details` of the error body (for example the productId of INSUFFICIENT_STOCK).
+    readonly details?: unknown,
   ) {
     super(message);
   }
@@ -38,8 +40,9 @@ export async function apiFetch<T>(
   const body = (await response.json().catch(() => null)) as {
     code?: string;
     message?: string;
+    details?: unknown;
   } | null;
   const code = body?.code ?? "UNKNOWN";
   if (isSessionExpired(response.status, code)) listeners.forEach((listener) => listener());
-  throw new ApiError(response.status, code, body?.message ?? "Terjadi kesalahan.");
+  throw new ApiError(response.status, code, body?.message ?? "Terjadi kesalahan.", body?.details);
 }

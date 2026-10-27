@@ -11,7 +11,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-export type NavItem = { label: string; href: string; icon: LucideIcon };
+// `hiddenFor` lists the roles that do not see the item (the API refuses them anyway; this only avoids a dead link).
+export type NavItem = { label: string; href: string; icon: LucideIcon; hiddenFor?: string[] };
 export type NavSection = { title: string | null; items: NavItem[] };
 
 // Menu structure follows the sidebar of screen S04 (notes/stitch). UI text is Indonesian (rule 12).
@@ -26,7 +27,7 @@ export const navSections: NavSection[] = [
       { label: "Ringkasan Stok", href: "/stock", icon: Boxes },
       { label: "Produk", href: "/products", icon: Package },
       { label: "Gudang", href: "/warehouses", icon: Warehouse },
-      { label: "Mutasi", href: "/transfers", icon: ArrowLeftRight },
+      { label: "Mutasi", href: "/transfers/new", icon: ArrowLeftRight, hiddenFor: ["VIEWER"] },
       { label: "Riwayat", href: "/movements", icon: History },
     ],
   },
@@ -43,4 +44,17 @@ export const navSections: NavSection[] = [
 /** An item is active on its own path and on every path below it, but not on a mere text prefix. */
 export function isNavItemActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** The sections a role sees; a section left without items is dropped. */
+export function navSectionsFor(role: string | undefined): NavSection[] {
+  return navSections
+    .map((section) => ({
+      ...section,
+      // Until the role is known, a restricted item stays hidden rather than flashing for a Viewer.
+      items: section.items.filter(
+        (item) => !item.hiddenFor || (role && !item.hiddenFor.includes(role)),
+      ),
+    }))
+    .filter((section) => section.items.length > 0);
 }

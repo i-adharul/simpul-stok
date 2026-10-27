@@ -3,19 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { isNavItemActive, navSections } from "./nav-items";
+import { isNavItemActive, navSectionsFor } from "./nav-items";
 
 type SidebarNavProps = {
   /** Called after a link is clicked, so the mobile drawer can close itself. */
   onNavigate?: () => void;
+  /** Role from GET /api/me; items hidden for it are left out. */
+  role?: string;
 };
 
-export function SidebarNav({ onNavigate }: SidebarNavProps) {
+export function SidebarNav({ onNavigate, role }: SidebarNavProps) {
   const pathname = usePathname();
 
   return (
     <nav aria-label="Menu utama" className="flex flex-col gap-5">
-      {navSections.map((section) => (
+      {navSectionsFor(role).map((section) => (
         <div key={section.title ?? "main"} className="flex flex-col gap-1">
           {section.title && (
             <p className="px-3 pb-1 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
